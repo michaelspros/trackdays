@@ -1,0 +1,628 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#ffffff" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Agenda" />
+  <title>Agenda</title>
+  <style>
+    :root {
+      --bg: #f7f8fa;
+      --surface: #ffffff;
+      --text: #111318;
+      --muted: #6e7584;
+      --border: rgba(17, 19, 24, 0.08);
+      --shadow: 0 6px 22px rgba(15, 20, 35, 0.06);
+      --shadow-hover: 0 10px 28px rgba(15, 20, 35, 0.11);
+      --header-bg: rgba(247, 248, 250, 0.88);
+      --toggle-bg: #d7dce6;
+      --toggle-knob: #ffffff;
+      --accent: #2f6efb;
+      --skeleton: linear-gradient(90deg, rgba(110,117,132,.12) 0%, rgba(110,117,132,.2) 50%, rgba(110,117,132,.12) 100%);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d1016;
+        --surface: #151a23;
+        --text: #f3f5fa;
+        --muted: #9aa4b7;
+        --border: rgba(243, 245, 250, 0.08);
+        --shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+        --shadow-hover: 0 12px 30px rgba(0, 0, 0, 0.48);
+        --header-bg: rgba(13, 16, 22, 0.88);
+        --toggle-bg: #2a3343;
+        --toggle-knob: #f3f5fa;
+        --accent: #6f9bff;
+      }
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100dvh;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+      padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+    }
+
+    .app {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 16px 14px 34px;
+    }
+
+    .top {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      backdrop-filter: saturate(1.1) blur(8px);
+      background: var(--header-bg);
+      border-bottom: 1px solid transparent;
+      margin: -16px -14px 14px;
+      padding: calc(12px + env(safe-area-inset-top)) 14px 12px;
+    }
+
+    .title {
+      margin: 0 0 12px;
+      font-size: 26px;
+      font-weight: 750;
+      letter-spacing: -0.02em;
+    }
+
+    .filters {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .switch {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+      color: var(--muted);
+      user-select: none;
+      cursor: pointer;
+    }
+
+    .switch input { display: none; }
+    .track {
+      width: 42px;
+      height: 24px;
+      border-radius: 999px;
+      background: var(--toggle-bg);
+      position: relative;
+      transition: background .2s ease;
+      flex-shrink: 0;
+    }
+
+    .track::after {
+      content: "";
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      background: var(--toggle-knob);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+      transition: transform .2s ease;
+    }
+
+    .switch input:checked + .track { background: var(--accent); }
+    .switch input:checked + .track::after { transform: translateX(18px); }
+
+    .state {
+      color: var(--muted);
+      font-size: 14px;
+      margin: 10px 2px 6px;
+      min-height: 22px;
+    }
+
+    .sections {
+      contain: content;
+      position: relative;
+      min-height: 120px;
+    }
+
+    .section {
+      margin-top: 14px;
+    }
+
+    .section-header {
+      position: sticky;
+      top: calc(74px + env(safe-area-inset-top));
+      z-index: 20;
+      display: inline-block;
+      margin: 0 0 10px;
+      padding: 4px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--surface) 72%, transparent);
+      backdrop-filter: blur(4px);
+    }
+
+    .list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 12px 14px;
+      box-shadow: var(--shadow);
+      transform: translateY(2px);
+      opacity: 0;
+      transition: box-shadow .22s ease, transform .22s ease;
+      will-change: transform, opacity;
+    }
+
+    .card.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .card:hover {
+      box-shadow: var(--shadow-hover);
+      transform: translateY(-2px);
+    }
+
+    .event-title {
+      margin: 0;
+      font-size: 16px;
+      line-height: 1.35;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: var(--text);
+    }
+
+    .event-date {
+      margin: 5px 0 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .event-location {
+      margin: 4px 0 0;
+      font-size: 13px;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .empty, .error {
+      margin-top: 16px;
+      border: 1px dashed var(--border);
+      border-radius: 16px;
+      padding: 22px;
+      text-align: center;
+      color: var(--muted);
+      background: color-mix(in srgb, var(--surface) 72%, transparent);
+    }
+
+    .skeleton {
+      display: grid;
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    .skeleton-card {
+      border-radius: 16px;
+      height: 74px;
+      background: var(--skeleton);
+      background-size: 200% 100%;
+      animation: shimmer 1.2s linear infinite;
+    }
+
+    @keyframes shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    @media (min-width: 680px) {
+      .app { padding: 18px 18px 36px; }
+      .top { margin: -18px -18px 14px; padding-left: 18px; padding-right: 18px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="top">
+      <h1 class="title">Agenda</h1>
+      <div class="filters">
+        <label class="switch">
+          <input id="next30" type="checkbox" />
+          <span class="track"></span>
+          <span>Next 30 days only</span>
+        </label>
+        <label class="switch">
+          <input id="hideAllDay" type="checkbox" />
+          <span class="track"></span>
+          <span>Hide all-day events</span>
+        </label>
+      </div>
+    </header>
+
+    <div id="state" class="state">Loading…</div>
+    <section id="sections" class="sections" aria-live="polite"></section>
+  </main>
+
+  <script src="https://unpkg.com/ical.js/dist/ical.min.js"></script>
+  <script>
+    const ICLOUD_WEBCAL_URL = "webcal://p130-caldav.icloud.com/published/2/MTA3OTI1Njk2NjEwNzkyNcZXCPkEBGXyRNljfcPcFp-zudFWU4bonEzIBQUcBqD65_CQJzxTgU71zUDgJ5PLydLI54MLZpM0KcK7zgNS1Yo";
+    const ICLOUD_HTTPS_URL = ICLOUD_WEBCAL_URL.replace(/^webcal:/i, "https:");
+
+    const CACHE_KEY = "agenda_ics_cache_v1";
+    const FILTER_KEY = "agenda_filter_state_v1";
+    const CACHE_TTL = 5 * 60 * 1000;
+    const REFRESH_MS = 5 * 60 * 1000;
+    const MAX_EVENTS = 100;
+    const EXPAND_DAYS = 90;
+    const GROUPS = ["Today", "Tomorrow", "This Week", "Next Week", "Later"];
+
+    const stateEl = document.getElementById("state");
+    const sectionsEl = document.getElementById("sections");
+    const next30El = document.getElementById("next30");
+    const hideAllDayEl = document.getElementById("hideAllDay");
+
+    const memory = {
+      rawIcs: "",
+      fetchedAt: 0,
+      events: [],
+      controller: null,
+      resizeTimer: null,
+      virtualState: { start: 0, end: MAX_EVENTS, enabled: false }
+    };
+
+    function initPWA() {
+      const manifest = {
+        name: "Agenda",
+        short_name: "Agenda",
+        display: "standalone",
+        start_url: ".",
+        background_color: "#ffffff",
+        theme_color: "#ffffff",
+        icons: [
+          {
+            src: "data:image/svg+xml;base64," + btoa(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='42' fill='%232f6efb'/><text x='50%' y='54%' dominant-baseline='middle' text-anchor='middle' font-family='-apple-system,Segoe UI,Roboto,sans-serif' font-size='96' fill='white'>•</text></svg>`),
+            sizes: "192x192",
+            type: "image/svg+xml",
+            purpose: "any"
+          }
+        ]
+      };
+      const blob = new Blob([JSON.stringify(manifest)], { type: "application/manifest+json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("link");
+      link.rel = "manifest";
+      link.href = url;
+      document.head.appendChild(link);
+    }
+
+    function loadFilterState() {
+      try {
+        const raw = localStorage.getItem(FILTER_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        next30El.checked = !!parsed.next30;
+        hideAllDayEl.checked = !!parsed.hideAllDay;
+      } catch (_) {}
+    }
+
+    function saveFilterState() {
+      localStorage.setItem(FILTER_KEY, JSON.stringify({ next30: next30El.checked, hideAllDay: hideAllDayEl.checked }));
+    }
+
+    function showSkeleton() {
+      const frag = document.createDocumentFragment();
+      const wrap = document.createElement("div");
+      wrap.className = "skeleton";
+      for (let i = 0; i < 5; i++) {
+        const sk = document.createElement("div");
+        sk.className = "skeleton-card";
+        wrap.appendChild(sk);
+      }
+      frag.appendChild(wrap);
+      sectionsEl.replaceChildren(frag);
+    }
+
+    function setState(text) {
+      stateEl.textContent = text;
+    }
+
+    function debounceResize() {
+      if (memory.resizeTimer) clearTimeout(memory.resizeTimer);
+      memory.resizeTimer = setTimeout(() => {
+        if (memory.events.length > 50) render(memory.events);
+      }, 120);
+    }
+
+    async function fetchICS(force = false) {
+      const now = Date.now();
+      if (!force && memory.rawIcs && now - memory.fetchedAt < CACHE_TTL) return memory.rawIcs;
+
+      if (!force) {
+        try {
+          const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || "null");
+          if (cached?.raw && now - cached.ts < CACHE_TTL) {
+            memory.rawIcs = cached.raw;
+            memory.fetchedAt = cached.ts;
+            return memory.rawIcs;
+          }
+        } catch (_) {}
+      }
+
+      if (memory.controller) memory.controller.abort();
+      memory.controller = new AbortController();
+      const signal = memory.controller.signal;
+
+      const tryFetch = async (url) => {
+        const res = await fetch(url, { signal, cache: "no-store" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.text();
+      };
+
+      let raw;
+      try {
+        raw = await tryFetch(ICLOUD_HTTPS_URL);
+      } catch (_) {
+        raw = await tryFetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(ICLOUD_HTTPS_URL)}`);
+      }
+
+      memory.rawIcs = raw;
+      memory.fetchedAt = Date.now();
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ raw, ts: memory.fetchedAt }));
+      return raw;
+    }
+
+    function parseAndExpand(raw) {
+      const now = new Date();
+      const until = new Date(now.getTime() + EXPAND_DAYS * 86400000);
+      const jcal = ICAL.parse(raw);
+      const comp = new ICAL.Component(jcal);
+      const vevents = comp.getAllSubcomponents("vevent");
+      const out = [];
+
+      for (const ve of vevents) {
+        const event = new ICAL.Event(ve);
+        if (event.isRecurrenceException()) continue;
+
+        const collect = (startT, endT) => {
+          if (!startT) return;
+          const startDate = startT.toJSDate();
+          const endDate = (endT || startT).toJSDate();
+          if (endDate < now) return;
+          out.push({
+            uid: event.uid,
+            title: (event.summary || "Untitled").trim() || "Untitled",
+            start: startDate,
+            end: endDate,
+            allDay: !!startT.isDate,
+            location: (event.location || "").trim()
+          });
+        };
+
+        if (event.isRecurring()) {
+          const iterator = event.iterator();
+          let next;
+          let safe = 0;
+          while ((next = iterator.next()) && safe < 1200) {
+            safe++;
+            const occStart = next.toJSDate();
+            if (occStart > until) break;
+            const details = event.getOccurrenceDetails(next);
+            collect(details.startDate, details.endDate);
+            if (out.length >= MAX_EVENTS * 3) break;
+          }
+        } else {
+          collect(event.startDate, event.endDate);
+        }
+        if (out.length >= MAX_EVENTS * 3) break;
+      }
+
+      out.sort((a, b) => a.start - b.start);
+      const dedupe = [];
+      const seen = new Set();
+      for (const e of out) {
+        const key = `${e.uid}|${e.start.getTime()}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        dedupe.push(e);
+        if (dedupe.length >= MAX_EVENTS) break;
+      }
+      return dedupe;
+    }
+
+    function isSameDay(a, b) {
+      return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+    }
+
+    function startOfWeek(date) {
+      const d = new Date(date);
+      const day = (d.getDay() + 6) % 7;
+      d.setHours(0, 0, 0, 0);
+      d.setDate(d.getDate() - day);
+      return d;
+    }
+
+    function groupForDate(date, now = new Date()) {
+      const today = new Date(now);
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      if (isSameDay(date, today)) return "Today";
+      if (isSameDay(date, tomorrow)) return "Tomorrow";
+
+      const thisWeekStart = startOfWeek(today);
+      const nextWeekStart = new Date(thisWeekStart);
+      nextWeekStart.setDate(nextWeekStart.getDate() + 7);
+      const afterNextWeekStart = new Date(nextWeekStart);
+      afterNextWeekStart.setDate(afterNextWeekStart.getDate() + 7);
+
+      if (date >= thisWeekStart && date < nextWeekStart) return "This Week";
+      if (date >= nextWeekStart && date < afterNextWeekStart) return "Next Week";
+      return "Later";
+    }
+
+    function formatDate(date, allDay) {
+      const day = new Intl.DateTimeFormat(undefined, { weekday: "short", day: "2-digit", month: "short" }).format(date);
+      if (allDay) return day;
+      const time = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(date);
+      return `${day} · ${time}`;
+    }
+
+    function applyFilters(events) {
+      const now = new Date();
+      const max30 = new Date(now.getTime() + 30 * 86400000);
+      return events.filter((e) => {
+        if (e.start < now) return false;
+        if (hideAllDayEl.checked && e.allDay) return false;
+        if (next30El.checked && e.start > max30) return false;
+        return true;
+      });
+    }
+
+    function virtualWindow(size) {
+      if (size <= 50) {
+        memory.virtualState.enabled = false;
+        return { start: 0, end: size };
+      }
+      memory.virtualState.enabled = true;
+      const cardH = 98;
+      const overscan = 10;
+      const top = window.scrollY;
+      const vh = window.innerHeight;
+      const start = Math.max(0, Math.floor(top / cardH) - overscan);
+      const end = Math.min(size, Math.ceil((top + vh) / cardH) + overscan * 2);
+      memory.virtualState.start = start;
+      memory.virtualState.end = end;
+      return { start, end };
+    }
+
+    function render(events) {
+      const filtered = applyFilters(events);
+      sectionsEl.textContent = "";
+      if (!filtered.length) {
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        empty.textContent = "No upcoming events";
+        sectionsEl.appendChild(empty);
+        setState("Updated just now");
+        return;
+      }
+
+      const win = virtualWindow(filtered.length);
+      const picked = filtered.slice(win.start, win.end);
+      const groups = new Map(GROUPS.map((g) => [g, []]));
+      for (const event of picked) groups.get(groupForDate(event.start)).push(event);
+
+      const frag = document.createDocumentFragment();
+      for (const key of GROUPS) {
+        const arr = groups.get(key);
+        if (!arr.length) continue;
+
+        const section = document.createElement("section");
+        section.className = "section";
+
+        const h = document.createElement("h2");
+        h.className = "section-header";
+        h.textContent = key;
+        section.appendChild(h);
+
+        const list = document.createElement("div");
+        list.className = "list";
+
+        for (const e of arr) {
+          const card = document.createElement("article");
+          card.className = "card";
+
+          const title = document.createElement("h3");
+          title.className = "event-title";
+          title.textContent = e.title;
+
+          const date = document.createElement("p");
+          date.className = "event-date";
+          date.textContent = formatDate(e.start, e.allDay);
+
+          card.append(title, date);
+          if (e.location) {
+            const loc = document.createElement("p");
+            loc.className = "event-location";
+            loc.textContent = e.location;
+            card.appendChild(loc);
+          }
+
+          list.appendChild(card);
+          requestAnimationFrame(() => card.classList.add("visible"));
+        }
+
+        section.appendChild(list);
+        frag.appendChild(section);
+      }
+
+      sectionsEl.replaceChildren(frag);
+      const virtualMsg = memory.virtualState.enabled ? ` · Virtualized ${win.start + 1}-${Math.min(win.end, filtered.length)} / ${filtered.length}` : "";
+      setState(`Updated ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}${virtualMsg}`);
+    }
+
+    async function refresh(force = false) {
+      try {
+        if (!memory.events.length) showSkeleton();
+        setState("Loading…");
+        const raw = await fetchICS(force);
+        memory.events = parseAndExpand(raw);
+        render(memory.events);
+      } catch (err) {
+        sectionsEl.innerHTML = `<div class="error">Could not load calendar</div>`;
+        setState("Error loading events");
+      }
+    }
+
+    function bind() {
+      next30El.addEventListener("change", () => {
+        saveFilterState();
+        render(memory.events);
+      });
+      hideAllDayEl.addEventListener("change", () => {
+        saveFilterState();
+        render(memory.events);
+      });
+
+      window.addEventListener("resize", debounceResize, { passive: true });
+      window.addEventListener("scroll", () => {
+        if (!memory.virtualState.enabled) return;
+        if (memory._scrollRAF) return;
+        memory._scrollRAF = requestAnimationFrame(() => {
+          memory._scrollRAF = null;
+          render(memory.events);
+        });
+      }, { passive: true });
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") refresh(false);
+      });
+    }
+
+    initPWA();
+    loadFilterState();
+    bind();
+    refresh(true);
+    setInterval(() => refresh(true), REFRESH_MS);
+  </script>
+</body>
+</html>
