@@ -82,6 +82,37 @@
       display: flex;
       gap: 14px;
       flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .refresh-btn {
+      appearance: none;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 8px 12px;
+      cursor: pointer;
+      box-shadow: var(--shadow);
+      transition: transform .2s ease, box-shadow .2s ease;
+    }
+
+    .refresh-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-hover);
+    }
+
+    .refresh-btn:active {
+      transform: translateY(0);
+    }
+
+    .refresh-btn:disabled {
+      opacity: 0.6;
+      cursor: wait;
+      transform: none;
+      box-shadow: var(--shadow);
     }
 
     .switch {
@@ -252,6 +283,7 @@
           <span class="track"></span>
           <span>Next 30 days only</span>
         </label>
+        <button id="refreshBtn" class="refresh-btn" type="button">Refresh feed</button>
       </div>
     </header>
 
@@ -276,6 +308,7 @@
     const stateEl = document.getElementById("state");
     const sectionsEl = document.getElementById("sections");
     const next30El = document.getElementById("next30");
+    const refreshBtnEl = document.getElementById("refreshBtn");
 
     const memory = {
       rawIcs: "",
@@ -578,6 +611,7 @@
 
     async function refresh(force = false) {
       try {
+        refreshBtnEl.disabled = true;
         if (!memory.events.length) showSkeleton();
         setState("Loading…");
         const raw = await fetchICS(force);
@@ -593,6 +627,8 @@
         }
         sectionsEl.innerHTML = `<div class="error">Could not load calendar</div>`;
         setState("Error loading events");
+      } finally {
+        refreshBtnEl.disabled = false;
       }
     }
 
@@ -600,6 +636,9 @@
       next30El.addEventListener("change", () => {
         saveFilterState();
         render(memory.events);
+      });
+      refreshBtnEl.addEventListener("click", () => {
+        refresh(true);
       });
       window.addEventListener("resize", debounceResize, { passive: true });
       window.addEventListener("scroll", () => {
