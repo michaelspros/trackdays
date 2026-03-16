@@ -82,6 +82,36 @@
       display: flex;
       gap: 14px;
       flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .refresh-btn {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: 999px;
+      padding: 8px 14px;
+      cursor: pointer;
+      transition: transform .15s ease, box-shadow .2s ease;
+      box-shadow: var(--shadow);
+    }
+
+    .refresh-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-hover);
+    }
+
+    .refresh-btn:active {
+      transform: translateY(0);
+    }
+
+    .refresh-btn:disabled {
+      opacity: .6;
+      cursor: wait;
+      transform: none;
+      box-shadow: none;
     }
 
     .switch {
@@ -257,6 +287,7 @@
           <span class="track"></span>
           <span>Hide all-day events</span>
         </label>
+        <button id="refreshFeed" class="refresh-btn" type="button">Refresh feed</button>
       </div>
     </header>
 
@@ -282,6 +313,7 @@
     const sectionsEl = document.getElementById("sections");
     const next30El = document.getElementById("next30");
     const hideAllDayEl = document.getElementById("hideAllDay");
+    const refreshFeedEl = document.getElementById("refreshFeed");
 
     const memory = {
       rawIcs: "",
@@ -586,6 +618,7 @@
 
     async function refresh(force = false) {
       try {
+        refreshFeedEl.disabled = true;
         if (!memory.events.length) showSkeleton();
         setState("Loading…");
         const raw = await fetchICS(force);
@@ -601,6 +634,8 @@
         }
         sectionsEl.innerHTML = `<div class="error">Could not load calendar</div>`;
         setState("Error loading events");
+      } finally {
+        refreshFeedEl.disabled = false;
       }
     }
 
@@ -613,6 +648,7 @@
         saveFilterState();
         render(memory.events);
       });
+      refreshFeedEl.addEventListener("click", () => refresh(true));
 
       window.addEventListener("resize", debounceResize, { passive: true });
       window.addEventListener("scroll", () => {
