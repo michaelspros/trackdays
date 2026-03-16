@@ -272,8 +272,8 @@
 
     const CACHE_KEY = "agenda_ics_cache_v1";
     const FILTER_KEY = "agenda_filter_state_v1";
-    const CACHE_TTL = 5 * 60 * 1000;
-    const REFRESH_MS = 5 * 60 * 1000;
+    const CACHE_TTL = 24 * 60 * 60 * 1000;
+    const REFRESH_MS = 60 * 60 * 1000;
     const MAX_EVENTS = 100;
     const EXPAND_DAYS = 90;
     const GROUPS = ["Today", "Tomorrow", "This Week", "Next Week", "Later"];
@@ -375,7 +375,7 @@
       const signal = memory.controller.signal;
 
       const tryFetch = async (url) => {
-        const res = await fetch(url, { signal, cache: "no-store" });
+        const res = await fetch(url, { signal, cache: "no-cache" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.text();
       };
@@ -592,6 +592,13 @@
         memory.events = parseAndExpand(raw);
         render(memory.events);
       } catch (err) {
+        const cached = memory.rawIcs;
+        if (cached) {
+          memory.events = parseAndExpand(cached);
+          render(memory.events);
+          setState("Using cached data (offline)");
+          return;
+        }
         sectionsEl.innerHTML = `<div class="error">Could not load calendar</div>`;
         setState("Error loading events");
       }
@@ -624,8 +631,8 @@
     initPWA();
     loadFilterState();
     bind();
-    refresh(true);
-    setInterval(() => refresh(true), REFRESH_MS);
+    refresh(false);
+    setInterval(() => refresh(false), REFRESH_MS);
   </script>
 </body>
 </html>
