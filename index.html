@@ -82,6 +82,22 @@
       display: flex;
       gap: 14px;
       flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .install-btn {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .install-btn[hidden] {
+      display: none;
     }
 
     .switch {
@@ -257,6 +273,7 @@
           <span class="track"></span>
           <span>Hide all-day events</span>
         </label>
+        <button id="installApp" class="install-btn" type="button" hidden>Install app</button>
       </div>
     </header>
 
@@ -277,11 +294,13 @@
     const MAX_EVENTS = 100;
     const EXPAND_DAYS = 90;
     const GROUPS = ["Today", "Tomorrow", "This Week", "Next Week", "Later"];
+    const SW_EVENTS_URL = `${location.origin}/last-known-events.json`;
 
     const stateEl = document.getElementById("state");
     const sectionsEl = document.getElementById("sections");
     const next30El = document.getElementById("next30");
     const hideAllDayEl = document.getElementById("hideAllDay");
+    const installAppEl = document.getElementById("installApp");
 
     const memory = {
       rawIcs: "",
@@ -289,18 +308,67 @@
       events: [],
       controller: null,
       resizeTimer: null,
-      virtualState: { start: 0, end: MAX_EVENTS, enabled: false }
+      virtualState: { start: 0, end: MAX_EVENTS, enabled: false },
+      deferredInstallPrompt: null
     };
 
+    function createIconDataUrl(size) {
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return "";
+
+      const radius = Math.round(size * 0.22);
+      ctx.fillStyle = "#2f6efb";
+      ctx.beginPath();
+      ctx.moveTo(radius, 0);
+      ctx.arcTo(size, 0, size, size, radius);
+      ctx.arcTo(size, size, 0, size, radius);
+      ctx.arcTo(0, size, 0, 0, radius);
+      ctx.arcTo(0, 0, size, 0, radius);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.arc(size / 2, size / 2, size * 0.12, 0, Math.PI * 2);
+      ctx.fill();
+
+      return canvas.toDataURL("image/png");
+    }
+
+    function savePwaIconLink(rel, href, sizes) {
+      const link = document.createElement("link");
+      link.rel = rel;
+      link.href = href;
+      if (sizes) link.sizes = sizes;
+      document.head.appendChild(link);
+    }
+
     function initPWA() {
+      const icon192 = createIconDataUrl(192);
+      const icon512 = createIconDataUrl(512);
       const manifest = {
-        name: "Agenda",
-        short_name: "Agenda",
+        name: "Trackdays",
+        short_name: "Trackdays",
         display: "standalone",
         start_url: ".",
         background_color: "#ffffff",
         theme_color: "#ffffff",
         icons: [
+          {
+            src: icon192,
+            sizes: "192x192",
+            type: "image/png",
+            purpose: "any maskable"
+          },
+          {
+            src: icon512,
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "any maskable"
+          },
           {
             src: "data:image/svg+xml," + encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='42' fill='%232f6efb'/><text x='50%' y='54%' dominant-baseline='middle' text-anchor='middle' font-family='-apple-system,Segoe UI,Roboto,sans-serif' font-size='96' fill='white'>•</text></svg>"),
             sizes: "192x192",
@@ -315,6 +383,76 @@
       link.rel = "manifest";
       link.href = url;
       document.head.appendChild(link);
+      link.addEventListener("load", () => URL.revokeObjectURL(url), { once: true });
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+
+      if (icon192) {
+        savePwaIconLink("icon", icon192, "192x192");
+        savePwaIconLink("apple-touch-icon", icon192, "192x192");
+      }
+      if (icon512) savePwaIconLink("icon", icon512, "512x512");
+    }
+
+    async function registerServiceWorker() {
+      if (!("serviceWorker" in navigator)) return;
+      try {
+        await navigator.serviceWorker.register("./sw.js", { scope: "./" });
+      } catch (_) {
+        setState("Offline mode unavailable");
+      }
+    }
+
+    function setupInstallPrompt() {
+      if (!installAppEl) return;
+      window.addEventListener("beforeinstallprompt", (event) => {
+        event.preventDefault();
+        memory.deferredInstallPrompt = event;
+        installAppEl.hidden = false;
+      });
+
+      window.addEventListener("appinstalled", () => {
+        memory.deferredInstallPrompt = null;
+        installAppEl.hidden = true;
+      });
+
+      installAppEl.addEventListener("click", async () => {
+        const deferred = memory.deferredInstallPrompt;
+        if (!deferred) return;
+        deferred.prompt();
+        await deferred.userChoice;
+        memory.deferredInstallPrompt = null;
+        installAppEl.hidden = true;
+      });
+    }
+
+    async function loadCachedEventsFromServiceWorker() {
+      if (!("caches" in window)) return null;
+      const cached = await caches.match(SW_EVENTS_URL);
+      if (!cached) return null;
+      const payload = await cached.json();
+      if (!Array.isArray(payload?.events)) return null;
+
+      const restored = payload.events
+        .map((event) => ({
+          ...event,
+          start: new Date(event.start),
+          end: new Date(event.end)
+        }))
+        .filter((event) => !Number.isNaN(event.start.valueOf()) && !Number.isNaN(event.end.valueOf()));
+      return restored.length ? restored : null;
+    }
+
+    function syncEventsToServiceWorker(events) {
+      if (!("serviceWorker" in navigator) || !events.length) return;
+      const payload = events.map((event) => ({
+        ...event,
+        start: event.start.toISOString(),
+        end: event.end.toISOString()
+      }));
+
+      navigator.serviceWorker.ready.then((registration) => {
+        registration.active?.postMessage({ type: "CACHE_EVENTS", payload });
+      }).catch(() => {});
     }
 
     function loadFilterState() {
@@ -591,12 +729,20 @@
         const raw = await fetchICS(force);
         memory.events = parseAndExpand(raw);
         render(memory.events);
+        syncEventsToServiceWorker(memory.events);
       } catch (err) {
         const cached = memory.rawIcs;
         if (cached) {
           memory.events = parseAndExpand(cached);
           render(memory.events);
           setState("Using cached data (offline)");
+          return;
+        }
+        const cachedEvents = await loadCachedEventsFromServiceWorker();
+        if (cachedEvents) {
+          memory.events = cachedEvents;
+          render(memory.events);
+          setState("Using offline snapshot");
           return;
         }
         sectionsEl.innerHTML = `<div class="error">Could not load calendar</div>`;
@@ -629,6 +775,8 @@
     }
 
     initPWA();
+    setupInstallPrompt();
+    registerServiceWorker();
     loadFilterState();
     bind();
     refresh(false);
