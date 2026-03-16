@@ -292,12 +292,7 @@
   </main>
 
   <script type="module">
-    import ICAL from "https://cdn.jsdelivr.net/npm/ical.js@2.2.1/+esm";
-
-    const ICLOUD_WEBCAL_URL = "webcal://p130-caldav.icloud.com/published/2/MTA3OTI1Njk2NjEwNzkyNcZXCPkEBGXyRNljfcPcFp-zudFWU4bonEzIBQUcBqD65_CQJzxTgU71zUDgJ5PLydLI54MLZpM0KcK7zgNS1Yo";
-    const ICLOUD_HTTPS_URL = ICLOUD_WEBCAL_URL.replace(/^webcal:/i, "https:");
-
-    const CACHE_KEY = "agenda_ics_cache_v1";
+    const EVENTS_CACHE_KEY = "agenda_events_cache_v1";
     const FILTER_KEY = "agenda_filter_state_v1";
     const CACHE_TTL = 24 * 60 * 60 * 1000;
     const REFRESH_MS = 60 * 60 * 1000;
@@ -311,13 +306,15 @@
     const refreshBtnEl = document.getElementById("refreshBtn");
 
     const memory = {
-      rawIcs: "",
       fetchedAt: 0,
       events: [],
       controller: null,
       resizeTimer: null,
       virtualState: { start: 0, end: MAX_EVENTS, enabled: false }
     };
+
+    const DAY_FORMATTER = new Intl.DateTimeFormat(undefined, { weekday: "short", day: "2-digit", month: "short" });
+    const TIME_FORMATTER = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" });
 
     function initPWA() {
       const manifest = {
@@ -374,6 +371,22 @@
       stateEl.textContent = text;
     }
 
+    function serializeEvents(events) {
+      return events.map((event) => ({
+        ...event,
+        start: event.start.getTime(),
+        end: event.end.getTime()
+      }));
+    }
+
+    function deserializeEvents(events) {
+      return (events || []).map((event) => ({
+        ...event,
+        start: new Date(event.start),
+        end: new Date(event.end)
+      }));
+    }
+
     function debounceResize() {
       if (memory.resizeTimer) clearTimeout(memory.resizeTimer);
       memory.resizeTimer = setTimeout(() => {
@@ -381,17 +394,17 @@
       }, 120);
     }
 
-    async function fetchICS(force = false) {
+    async function fetchNormalizedEvents(force = false) {
       const now = Date.now();
-      if (!force && memory.rawIcs && now - memory.fetchedAt < CACHE_TTL) return memory.rawIcs;
+      if (!force && memory.events.length && now - memory.fetchedAt < CACHE_TTL) return memory.events;
 
       if (!force) {
         try {
-          const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || "null");
-          if (cached?.raw && now - cached.ts < CACHE_TTL) {
-            memory.rawIcs = cached.raw;
+          const cached = JSON.parse(localStorage.getItem(EVENTS_CACHE_KEY) || "null");
+          if (cached?.events?.length && now - cached.ts < CACHE_TTL) {
             memory.fetchedAt = cached.ts;
-            return memory.rawIcs;
+            memory.events = deserializeEvents(cached.events);
+            return memory.events;
           }
         } catch (_) {}
       }
@@ -400,81 +413,20 @@
       memory.controller = new AbortController();
       const signal = memory.controller.signal;
 
-      const tryFetch = async (url) => {
-        const res = await fetch(url, { signal, cache: "no-cache" });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.text();
-      };
+      const res = await fetch(`/api/events${force ? "?refresh=1" : ""}`, { signal, cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-      let raw;
-      try {
-        raw = await tryFetch(ICLOUD_HTTPS_URL);
-      } catch (_) {
-        raw = await tryFetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(ICLOUD_HTTPS_URL)}`);
-      }
+      const payload = await res.json();
+      const events = deserializeEvents(payload.events || []);
+      memory.events = events;
+      memory.fetchedAt = payload.generatedAt || Date.now();
 
-      memory.rawIcs = raw;
-      memory.fetchedAt = Date.now();
-      localStorage.setItem(CACHE_KEY, JSON.stringify({ raw, ts: memory.fetchedAt }));
-      return raw;
-    }
+      localStorage.setItem(EVENTS_CACHE_KEY, JSON.stringify({
+        ts: memory.fetchedAt,
+        events: serializeEvents(events)
+      }));
 
-    function parseAndExpand(raw) {
-      const now = new Date();
-      const until = new Date(now.getTime() + EXPAND_DAYS * 86400000);
-      const jcal = ICAL.parse(raw);
-      const comp = new ICAL.Component(jcal);
-      const vevents = comp.getAllSubcomponents("vevent");
-      const out = [];
-
-      for (const ve of vevents) {
-        const event = new ICAL.Event(ve);
-        if (event.isRecurrenceException()) continue;
-
-        const collect = (startT, endT) => {
-          if (!startT) return;
-          const startDate = startT.toJSDate();
-          const endDate = (endT || startT).toJSDate();
-          if (endDate < now) return;
-          out.push({
-            uid: event.uid,
-            title: (event.summary || "Untitled").trim() || "Untitled",
-            start: startDate,
-            end: endDate,
-            allDay: !!startT.isDate,
-            location: (event.location || "").trim()
-          });
-        };
-
-        if (event.isRecurring()) {
-          const iterator = event.iterator();
-          let next;
-          let safe = 0;
-          while ((next = iterator.next()) && safe < 1200) {
-            safe++;
-            const occStart = next.toJSDate();
-            if (occStart > until) break;
-            const details = event.getOccurrenceDetails(next);
-            collect(details.startDate, details.endDate);
-            if (out.length >= MAX_EVENTS * 3) break;
-          }
-        } else {
-          collect(event.startDate, event.endDate);
-        }
-        if (out.length >= MAX_EVENTS * 3) break;
-      }
-
-      out.sort((a, b) => a.start - b.start);
-      const dedupe = [];
-      const seen = new Set();
-      for (const e of out) {
-        const key = `${e.uid}|${e.start.getTime()}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        dedupe.push(e);
-        if (dedupe.length >= MAX_EVENTS) break;
-      }
-      return dedupe;
+      return events;
     }
 
     function isSameDay(a, b) {
@@ -510,9 +462,9 @@
     }
 
     function formatDate(date, allDay) {
-      const day = new Intl.DateTimeFormat(undefined, { weekday: "short", day: "2-digit", month: "short" }).format(date);
+      const day = DAY_FORMATTER.format(date);
       if (allDay) return day;
-      const time = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(date);
+      const time = TIME_FORMATTER.format(date);
       return `${day} · ${time}`;
     }
 
@@ -613,13 +565,10 @@
         refreshBtnEl.disabled = true;
         if (!memory.events.length) showSkeleton();
         setState("Loading…");
-        const raw = await fetchICS(force);
-        memory.events = parseAndExpand(raw);
+        memory.events = await fetchNormalizedEvents(force);
         render(memory.events);
       } catch (err) {
-        const cached = memory.rawIcs;
-        if (cached) {
-          memory.events = parseAndExpand(cached);
+        if (memory.events.length) {
           render(memory.events);
           setState("Using cached data (offline)");
           return;
