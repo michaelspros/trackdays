@@ -266,13 +266,33 @@
     const REFRESH_MS = 60 * 60 * 1000;
     const MAX_EVENTS = 100;
     const GROUPS = ["Today", "Tomorrow", "This Week", "Next Week", "Later"];
-    const API_ENDPOINTS = [
+
+    function deriveBasePath(pathname) {
+      const clean = pathname.replace(/\/[^/]*$/, "");
+      return clean === "/" ? "" : clean.replace(/\/$/, "");
+    }
+
+    function unique(values) {
+      return [...new Set(values.filter(Boolean))];
+    }
+
+    const BASE_PATH = deriveBasePath(window.location.pathname);
+    const APP_SCOPE = BASE_PATH ? `${BASE_PATH}/` : "/";
+    const API_ENDPOINTS = unique([
       window.TRACKDAYS_API_EVENTS_URL,
+      `${BASE_PATH}/api/events`,
+      `${BASE_PATH}/api/events/`,
+      `${BASE_PATH}/.netlify/functions/events`,
+      `${BASE_PATH}/.netlify/functions/events/`,
       "api/events",
+      "api/events/",
       "/api/events",
+      "/api/events/",
       ".netlify/functions/events",
-      "/.netlify/functions/events"
-    ].filter(Boolean);
+      ".netlify/functions/events/",
+      "/.netlify/functions/events",
+      "/.netlify/functions/events/"
+    ]);
 
     const stateEl = document.getElementById("state");
     const sectionsEl = document.getElementById("sections");
@@ -291,7 +311,8 @@
         name: "Agenda",
         short_name: "Agenda",
         display: "standalone",
-        start_url: ".",
+        start_url: APP_SCOPE,
+        scope: APP_SCOPE,
         background_color: "#ffffff",
         theme_color: "#ffffff",
         icons: [
