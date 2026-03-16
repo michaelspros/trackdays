@@ -10,6 +10,7 @@
   <meta name="apple-mobile-web-app-title" content="Trackdays" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%232f6efb'/%3E%3Ccircle cx='32' cy='32' r='8' fill='white'/%3E%3C/svg%3E" />
   <title>Trackdays</title>
+  <link rel="manifest" href="manifest.webmanifest" />
   <style>
     :root {
       --bg: #f7f8fa;
@@ -277,7 +278,6 @@
     }
 
     const BASE_PATH = deriveBasePath(window.location.pathname);
-    const APP_SCOPE = BASE_PATH ? `${BASE_PATH}/` : "/";
     const API_ENDPOINTS = unique([
       window.TRACKDAYS_API_EVENTS_URL,
       `${BASE_PATH}/api/events`,
@@ -294,6 +294,12 @@
       "/.netlify/functions/events/"
     ]);
 
+    const CALENDAR_URL =
+      window.TRACKDAYS_CALENDAR_URL ||
+      document.querySelector('meta[name="trackdays-calendar-url"]')?.content ||
+      localStorage.getItem("trackdays_calendar_url") ||
+      "";
+
     const stateEl = document.getElementById("state");
     const sectionsEl = document.getElementById("sections");
     const next30El = document.getElementById("next30");
@@ -305,31 +311,10 @@
       resizeTimer: null,
       virtualState: { start: 0, end: MAX_EVENTS, enabled: false }
     };
-
-    function initPWA() {
-      const manifest = {
-        name: "Agenda",
-        short_name: "Agenda",
-        display: "standalone",
-        start_url: APP_SCOPE,
-        scope: APP_SCOPE,
-        background_color: "#ffffff",
-        theme_color: "#ffffff",
-        icons: [
-          {
-            src: "data:image/svg+xml," + encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='42' fill='%232f6efb'/><text x='50%' y='54%' dominant-baseline='middle' text-anchor='middle' font-family='-apple-system,Segoe UI,Roboto,sans-serif' font-size='96' fill='white'>•</text></svg>"),
-            sizes: "192x192",
-            type: "image/svg+xml",
-            purpose: "any"
-          }
-        ]
-      };
-      const blob = new Blob([JSON.stringify(manifest)], { type: "application/manifest+json" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("link");
-      link.rel = "manifest";
-      link.href = url;
-      document.head.appendChild(link);
+    async function fetchEventsFromCalendar(signal) {
+      if (!CALENDAR_URL) return null;
+      const mod = await import("./lib/calendar-feed.js");
+      return mod.fetchCalendarEvents(CALENDAR_URL, { signal, noCache: true });
     }
 
     function loadFilterState() {
@@ -406,19 +391,27 @@
       let payload = null;
       let lastError = null;
 
+      memory.disabledEndpoints ||= new Set();
       for (const endpoint of API_ENDPOINTS) {
+        if (memory.disabledEndpoints.has(endpoint)) continue;
         const response = await fetch(endpoint, { signal, cache: "no-cache" });
         if (response.ok) {
           payload = await response.json();
           break;
         }
 
-        if (response.status !== 404) {
-          lastError = new Error(`HTTP ${response.status} from ${endpoint}`);
-          break;
+        if (response.status === 404) {
+          memory.disabledEndpoints.add(endpoint);
+          lastError = new Error(`HTTP 404 from ${endpoint}`);
+          continue;
         }
 
-        lastError = new Error(`HTTP 404 from ${endpoint}`);
+        lastError = new Error(`HTTP ${response.status} from ${endpoint}`);
+        break;
+      }
+
+      if (!payload) {
+        payload = await fetchEventsFromCalendar(signal);
       }
 
       if (!payload) throw lastError || new Error("No API endpoint configured");
@@ -596,7 +589,6 @@
       });
     }
 
-    initPWA();
     loadFilterState();
     bind();
     refresh(false);
