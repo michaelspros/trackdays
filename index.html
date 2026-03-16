@@ -4,9 +4,11 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#ffffff" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="Agenda" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%232f6efb'/%3E%3Ccircle cx='32' cy='32' r='8' fill='white'/%3E%3C/svg%3E" />
   <title>Agenda</title>
   <style>
     :root {
@@ -262,8 +264,9 @@
     <section id="sections" class="sections" aria-live="polite"></section>
   </main>
 
-  <script src="https://unpkg.com/ical.js/dist/ical.min.js"></script>
-  <script>
+  <script type="module">
+    import ICAL from "https://cdn.jsdelivr.net/npm/ical.js@2.2.1/+esm";
+
     const ICLOUD_WEBCAL_URL = "webcal://p130-caldav.icloud.com/published/2/MTA3OTI1Njk2NjEwNzkyNcZXCPkEBGXyRNljfcPcFp-zudFWU4bonEzIBQUcBqD65_CQJzxTgU71zUDgJ5PLydLI54MLZpM0KcK7zgNS1Yo";
     const ICLOUD_HTTPS_URL = ICLOUD_WEBCAL_URL.replace(/^webcal:/i, "https:");
 
@@ -299,7 +302,7 @@
         theme_color: "#ffffff",
         icons: [
           {
-            src: "data:image/svg+xml;base64," + btoa(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='42' fill='%232f6efb'/><text x='50%' y='54%' dominant-baseline='middle' text-anchor='middle' font-family='-apple-system,Segoe UI,Roboto,sans-serif' font-size='96' fill='white'>•</text></svg>`),
+            src: "data:image/svg+xml," + encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='42' fill='%232f6efb'/><text x='50%' y='54%' dominant-baseline='middle' text-anchor='middle' font-family='-apple-system,Segoe UI,Roboto,sans-serif' font-size='96' fill='white'>•</text></svg>"),
             sizes: "192x192",
             type: "image/svg+xml",
             purpose: "any"
