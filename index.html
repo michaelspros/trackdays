@@ -266,6 +266,11 @@
     const REFRESH_MS = 60 * 60 * 1000;
     const MAX_EVENTS = 100;
     const GROUPS = ["Today", "Tomorrow", "This Week", "Next Week", "Later"];
+    const API_ENDPOINTS = [
+      window.TRACKDAYS_API_EVENTS_URL,
+      "/api/events",
+      "/.netlify/functions/events"
+    ].filter(Boolean);
 
     const stateEl = document.getElementById("state");
     const sectionsEl = document.getElementById("sections");
@@ -375,10 +380,25 @@
       memory.controller = new AbortController();
       const signal = memory.controller.signal;
 
-      const response = await fetch("/api/events", { signal, cache: "no-cache" });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      let payload = null;
+      let lastError = null;
 
-      const payload = await response.json();
+      for (const endpoint of API_ENDPOINTS) {
+        const response = await fetch(endpoint, { signal, cache: "no-cache" });
+        if (response.ok) {
+          payload = await response.json();
+          break;
+        }
+
+        if (response.status !== 404) {
+          lastError = new Error(`HTTP ${response.status} from ${endpoint}`);
+          break;
+        }
+
+        lastError = new Error(`HTTP 404 from ${endpoint}`);
+      }
+
+      if (!payload) throw lastError || new Error("No API endpoint configured");
       memory.events = normalizeEvents(payload.events || []);
       memory.fetchedAt = Date.now();
       localStorage.setItem(CACHE_KEY, JSON.stringify({ events: payload.events || [], ts: memory.fetchedAt }));
