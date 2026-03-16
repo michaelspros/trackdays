@@ -260,25 +260,27 @@
   </main>
 
   <script type="module">
-    const CACHE_KEY = "agenda_events_cache_v1";
+    import ICAL from "https://cdn.jsdelivr.net/npm/ical.js@2.2.1/+esm";
+
+    const ICLOUD_WEBCAL_URL = "webcal://p130-caldav.icloud.com/published/2/MTA3OTI1Njk2NjEwNzkyNcZXCPkEBGXyRNljfcPcFp-zudFWU4bonEzIBQUcBqD65_CQJzxTgU71zUDgJ5PLydLI54MLZpM0KcK7zgNS1Yo";
+    const ICLOUD_HTTPS_URL = ICLOUD_WEBCAL_URL.replace(/^webcal:/i, "https:");
+
+    const CACHE_KEY = "agenda_ics_cache_v1";
     const FILTER_KEY = "agenda_filter_state_v1";
     const CACHE_TTL = 24 * 60 * 60 * 1000;
     const REFRESH_MS = 60 * 60 * 1000;
     const MAX_EVENTS = 100;
+    const EXPAND_DAYS = 90;
     const GROUPS = ["Today", "Tomorrow", "This Week", "Next Week", "Later"];
-    const API_ENDPOINTS = [
-      window.TRACKDAYS_API_EVENTS_URL,
-      "/api/events",
-      "/.netlify/functions/events"
-    ].filter(Boolean);
 
     const stateEl = document.getElementById("state");
     const sectionsEl = document.getElementById("sections");
     const next30El = document.getElementById("next30");
 
     const memory = {
-      events: [],
+      rawIcs: "",
       fetchedAt: 0,
+      events: [],
       controller: null,
       resizeTimer: null,
       virtualState: { start: 0, end: MAX_EVENTS, enabled: false }
@@ -346,32 +348,17 @@
       }, 120);
     }
 
-    function normalizeEvents(events) {
-      return events
-        .map((event) => ({
-          uid: event.uid || "",
-          title: (event.title || "Untitled").trim() || "Untitled",
-          start: new Date(event.start),
-          end: new Date(event.end),
-          allDay: !!event.allDay,
-          location: (event.location || "").trim()
-        }))
-        .filter((event) => !Number.isNaN(event.start.getTime()))
-        .sort((a, b) => a.start - b.start)
-        .slice(0, MAX_EVENTS);
-    }
-
-    async function fetchEvents(force = false) {
+    async function fetchICS(force = false) {
       const now = Date.now();
-      if (!force && memory.events.length && now - memory.fetchedAt < CACHE_TTL) return memory.events;
+      if (!force && memory.rawIcs && now - memory.fetchedAt < CACHE_TTL) return memory.rawIcs;
 
       if (!force) {
         try {
           const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || "null");
-          if (cached?.events && now - cached.ts < CACHE_TTL) {
-            memory.events = normalizeEvents(cached.events);
+          if (cached?.raw && now - cached.ts < CACHE_TTL) {
+            memory.rawIcs = cached.raw;
             memory.fetchedAt = cached.ts;
-            return memory.events;
+            return memory.rawIcs;
           }
         } catch (_) {}
       }
@@ -380,29 +367,81 @@
       memory.controller = new AbortController();
       const signal = memory.controller.signal;
 
-      let payload = null;
-      let lastError = null;
+      const tryFetch = async (url) => {
+        const res = await fetch(url, { signal, cache: "no-cache" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.text();
+      };
 
-      for (const endpoint of API_ENDPOINTS) {
-        const response = await fetch(endpoint, { signal, cache: "no-cache" });
-        if (response.ok) {
-          payload = await response.json();
-          break;
-        }
-
-        if (response.status !== 404) {
-          lastError = new Error(`HTTP ${response.status} from ${endpoint}`);
-          break;
-        }
-
-        lastError = new Error(`HTTP 404 from ${endpoint}`);
+      let raw;
+      try {
+        raw = await tryFetch(ICLOUD_HTTPS_URL);
+      } catch (_) {
+        raw = await tryFetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(ICLOUD_HTTPS_URL)}`);
       }
 
-      if (!payload) throw lastError || new Error("No API endpoint configured");
-      memory.events = normalizeEvents(payload.events || []);
+      memory.rawIcs = raw;
       memory.fetchedAt = Date.now();
-      localStorage.setItem(CACHE_KEY, JSON.stringify({ events: payload.events || [], ts: memory.fetchedAt }));
-      return memory.events;
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ raw, ts: memory.fetchedAt }));
+      return raw;
+    }
+
+    function parseAndExpand(raw) {
+      const now = new Date();
+      const until = new Date(now.getTime() + EXPAND_DAYS * 86400000);
+      const jcal = ICAL.parse(raw);
+      const comp = new ICAL.Component(jcal);
+      const vevents = comp.getAllSubcomponents("vevent");
+      const out = [];
+
+      for (const ve of vevents) {
+        const event = new ICAL.Event(ve);
+        if (event.isRecurrenceException()) continue;
+
+        const collect = (startT, endT) => {
+          if (!startT) return;
+          const startDate = startT.toJSDate();
+          const endDate = (endT || startT).toJSDate();
+          if (endDate < now) return;
+          out.push({
+            uid: event.uid,
+            title: (event.summary || "Untitled").trim() || "Untitled",
+            start: startDate,
+            end: endDate,
+            allDay: !!startT.isDate,
+            location: (event.location || "").trim()
+          });
+        };
+
+        if (event.isRecurring()) {
+          const iterator = event.iterator();
+          let next;
+          let safe = 0;
+          while ((next = iterator.next()) && safe < 1200) {
+            safe++;
+            const occStart = next.toJSDate();
+            if (occStart > until) break;
+            const details = event.getOccurrenceDetails(next);
+            collect(details.startDate, details.endDate);
+            if (out.length >= MAX_EVENTS * 3) break;
+          }
+        } else {
+          collect(event.startDate, event.endDate);
+        }
+        if (out.length >= MAX_EVENTS * 3) break;
+      }
+
+      out.sort((a, b) => a.start - b.start);
+      const dedupe = [];
+      const seen = new Set();
+      for (const e of out) {
+        const key = `${e.uid}|${e.start.getTime()}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        dedupe.push(e);
+        if (dedupe.length >= MAX_EVENTS) break;
+      }
+      return dedupe;
     }
 
     function isSameDay(a, b) {
@@ -541,10 +580,13 @@
       try {
         if (!memory.events.length) showSkeleton();
         setState("Loading…");
-        await fetchEvents(force);
+        const raw = await fetchICS(force);
+        memory.events = parseAndExpand(raw);
         render(memory.events);
-      } catch (_) {
-        if (memory.events.length) {
+      } catch (err) {
+        const cached = memory.rawIcs;
+        if (cached) {
+          memory.events = parseAndExpand(cached);
           render(memory.events);
           setState("Using cached data (offline)");
           return;
