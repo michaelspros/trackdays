@@ -198,7 +198,7 @@
       color: var(--muted);
     }
 
-    .event-location {
+    .event-note {
       margin: 4px 0 0;
       font-size: 13px;
       color: var(--muted);
@@ -549,18 +549,18 @@
 
           const title = document.createElement("h3");
           title.className = "event-title";
-          title.textContent = e.title;
+          title.textContent = e.location || e.title;
 
           const date = document.createElement("p");
           date.className = "event-date";
           date.textContent = formatDate(e.start, e.allDay);
 
           card.append(title, date);
-          if (e.location) {
-            const loc = document.createElement("p");
-            loc.className = "event-location";
-            loc.textContent = e.location;
-            card.appendChild(loc);
+          if (e.location && e.title) {
+            const note = document.createElement("p");
+            note.className = "event-note";
+            note.textContent = e.title;
+            card.appendChild(note);
           }
 
           list.appendChild(card);
