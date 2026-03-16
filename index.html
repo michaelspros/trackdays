@@ -580,21 +580,20 @@
           const card = document.createElement("article");
           card.className = "card";
 
-          const title = document.createElement("h3");
-          title.className = "event-title";
-          title.textContent = e.title;
+          const locationHeading = document.createElement("h3");
+          locationHeading.className = "event-title";
+          locationHeading.textContent = e.location || e.title;
 
           const date = document.createElement("p");
           date.className = "event-date";
           date.textContent = formatDate(e.start, e.allDay);
 
-          card.append(title, date);
-          if (e.location) {
-            const loc = document.createElement("p");
-            loc.className = "event-location";
-            loc.textContent = e.location;
-            card.appendChild(loc);
-          }
+          card.append(locationHeading, date);
+
+          const titleDetail = document.createElement("p");
+          titleDetail.className = "event-location";
+          titleDetail.textContent = e.title;
+          card.appendChild(titleDetail);
 
           list.appendChild(card);
           requestAnimationFrame(() => card.classList.add("visible"));
