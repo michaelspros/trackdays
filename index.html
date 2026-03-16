@@ -252,11 +252,6 @@
           <span class="track"></span>
           <span>Next 30 days only</span>
         </label>
-        <label class="switch">
-          <input id="hideAllDay" type="checkbox" />
-          <span class="track"></span>
-          <span>Hide all-day events</span>
-        </label>
       </div>
     </header>
 
@@ -281,7 +276,6 @@
     const stateEl = document.getElementById("state");
     const sectionsEl = document.getElementById("sections");
     const next30El = document.getElementById("next30");
-    const hideAllDayEl = document.getElementById("hideAllDay");
 
     const memory = {
       rawIcs: "",
@@ -323,12 +317,11 @@
         if (!raw) return;
         const parsed = JSON.parse(raw);
         next30El.checked = !!parsed.next30;
-        hideAllDayEl.checked = !!parsed.hideAllDay;
       } catch (_) {}
     }
 
     function saveFilterState() {
-      localStorage.setItem(FILTER_KEY, JSON.stringify({ next30: next30El.checked, hideAllDay: hideAllDayEl.checked }));
+      localStorage.setItem(FILTER_KEY, JSON.stringify({ next30: next30El.checked }));
     }
 
     function showSkeleton() {
@@ -495,7 +488,6 @@
       const max30 = new Date(now.getTime() + 30 * 86400000);
       return events.filter((e) => {
         if (e.start < now) return false;
-        if (hideAllDayEl.checked && e.allDay) return false;
         if (next30El.checked && e.start > max30) return false;
         return true;
       });
@@ -609,11 +601,6 @@
         saveFilterState();
         render(memory.events);
       });
-      hideAllDayEl.addEventListener("change", () => {
-        saveFilterState();
-        render(memory.events);
-      });
-
       window.addEventListener("resize", debounceResize, { passive: true });
       window.addEventListener("scroll", () => {
         if (!memory.virtualState.enabled) return;
