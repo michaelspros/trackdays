@@ -268,7 +268,9 @@
     const GROUPS = ["Today", "Tomorrow", "This Week", "Next Week", "Later"];
     const API_ENDPOINTS = [
       window.TRACKDAYS_API_EVENTS_URL,
+      "api/events",
       "/api/events",
+      ".netlify/functions/events",
       "/.netlify/functions/events"
     ].filter(Boolean);
 
