@@ -312,6 +312,7 @@
       events: [],
       controller: null,
       resizeTimer: null,
+      lastFetchSource: "",
       virtualState: { start: 0, end: MAX_EVENTS, enabled: false }
     };
 
@@ -320,7 +321,7 @@
         name: "Agenda",
         short_name: "Agenda",
         display: "standalone",
-        start_url: ".",
+        start_url: `${location.origin}${location.pathname}`,
         background_color: "#ffffff",
         theme_color: "#ffffff",
         icons: [
@@ -383,16 +384,30 @@
       const signal = memory.controller.signal;
 
       const tryFetch = async (url) => {
-        const res = await fetch(url, { signal, cache: "no-store" });
+        const res = await fetch(url, { signal, cache: "no-store", mode: "cors" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.text();
       };
 
-      try {
-        return await tryFetch(ICLOUD_HTTPS_URL);
-      } catch (_) {
-        return tryFetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(ICLOUD_HTTPS_URL)}`);
+      const sources = [
+        { name: "iCloud", url: ICLOUD_HTTPS_URL },
+        { name: "allorigins", url: `https://api.allorigins.win/raw?url=${encodeURIComponent(ICLOUD_HTTPS_URL)}` },
+        { name: "corsproxy", url: `https://corsproxy.io/?${encodeURIComponent(ICLOUD_HTTPS_URL)}` }
+      ];
+
+      let lastError = null;
+      for (const source of sources) {
+        try {
+          const raw = await tryFetch(source.url);
+          if (!raw || !raw.includes("BEGIN:VCALENDAR")) throw new Error("Invalid calendar payload");
+          memory.lastFetchSource = source.name;
+          return raw;
+        } catch (err) {
+          lastError = err;
+        }
       }
+
+      throw lastError || new Error("Failed to fetch calendar");
     }
 
     function parseAndExpand(raw) {
@@ -581,7 +596,8 @@
 
       sectionsEl.replaceChildren(frag);
       const virtualMsg = memory.virtualState.enabled ? ` · Virtualized ${win.start + 1}-${Math.min(win.end, filtered.length)} / ${filtered.length}` : "";
-      setState(`Updated ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}${virtualMsg}`);
+      const sourceMsg = memory.lastFetchSource ? ` · Source: ${memory.lastFetchSource}` : "";
+      setState(`Updated ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}${sourceMsg}${virtualMsg}`);
     }
 
     async function refresh() {
@@ -593,7 +609,12 @@
         memory.events = parseAndExpand(raw);
         render(memory.events);
       } catch (err) {
-        sectionsEl.innerHTML = `<div class="error">Could not load calendar</div>`;
+        if (memory.events.length) {
+          render(memory.events);
+          setState("Using cached events (refresh failed)");
+          return;
+        }
+        sectionsEl.innerHTML = `<div class="error">Could not load calendar. Please try again shortly.</div>`;
         setState("Error loading events");
       } finally {
         refreshBtnEl.disabled = false;
