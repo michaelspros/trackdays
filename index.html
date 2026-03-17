@@ -297,9 +297,7 @@
     const ICLOUD_WEBCAL_URL = "webcal://p130-caldav.icloud.com/published/2/MTA3OTI1Njk2NjEwNzkyNcZXCPkEBGXyRNljfcPcFp-zudFWU4bonEzIBQUcBqD65_CQJzxTgU71zUDgJ5PLydLI54MLZpM0KcK7zgNS1Yo";
     const ICLOUD_HTTPS_URL = ICLOUD_WEBCAL_URL.replace(/^webcal:/i, "https:");
 
-    const CACHE_KEY = "agenda_ics_cache_v1";
     const FILTER_KEY = "agenda_filter_state_v1";
-    const CACHE_TTL = 24 * 60 * 60 * 1000;
     const REFRESH_MS = 60 * 60 * 1000;
     const MAX_EVENTS = 100;
     const EXPAND_DAYS = 90;
@@ -311,8 +309,6 @@
     const refreshBtnEl = document.getElementById("refreshBtn");
 
     const memory = {
-      rawIcs: "",
-      fetchedAt: 0,
       events: [],
       controller: null,
       resizeTimer: null,
@@ -381,42 +377,22 @@
       }, 120);
     }
 
-    async function fetchICS(force = false) {
-      const now = Date.now();
-      if (!force && memory.rawIcs && now - memory.fetchedAt < CACHE_TTL) return memory.rawIcs;
-
-      if (!force) {
-        try {
-          const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || "null");
-          if (cached?.raw && now - cached.ts < CACHE_TTL) {
-            memory.rawIcs = cached.raw;
-            memory.fetchedAt = cached.ts;
-            return memory.rawIcs;
-          }
-        } catch (_) {}
-      }
-
+    async function fetchICS() {
       if (memory.controller) memory.controller.abort();
       memory.controller = new AbortController();
       const signal = memory.controller.signal;
 
       const tryFetch = async (url) => {
-        const res = await fetch(url, { signal, cache: "no-cache" });
+        const res = await fetch(url, { signal, cache: "no-store" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.text();
       };
 
-      let raw;
       try {
-        raw = await tryFetch(ICLOUD_HTTPS_URL);
+        return await tryFetch(ICLOUD_HTTPS_URL);
       } catch (_) {
-        raw = await tryFetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(ICLOUD_HTTPS_URL)}`);
+        return tryFetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(ICLOUD_HTTPS_URL)}`);
       }
-
-      memory.rawIcs = raw;
-      memory.fetchedAt = Date.now();
-      localStorage.setItem(CACHE_KEY, JSON.stringify({ raw, ts: memory.fetchedAt }));
-      return raw;
     }
 
     function parseAndExpand(raw) {
@@ -608,22 +584,15 @@
       setState(`Updated ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}${virtualMsg}`);
     }
 
-    async function refresh(force = false) {
+    async function refresh() {
       try {
         refreshBtnEl.disabled = true;
         if (!memory.events.length) showSkeleton();
         setState("Loading…");
-        const raw = await fetchICS(force);
+        const raw = await fetchICS();
         memory.events = parseAndExpand(raw);
         render(memory.events);
       } catch (err) {
-        const cached = memory.rawIcs;
-        if (cached) {
-          memory.events = parseAndExpand(cached);
-          render(memory.events);
-          setState("Using cached data (offline)");
-          return;
-        }
         sectionsEl.innerHTML = `<div class="error">Could not load calendar</div>`;
         setState("Error loading events");
       } finally {
@@ -637,7 +606,7 @@
         render(memory.events);
       });
       refreshBtnEl.addEventListener("click", () => {
-        refresh(true);
+        refresh();
       });
       window.addEventListener("resize", debounceResize, { passive: true });
       window.addEventListener("scroll", () => {
@@ -649,15 +618,15 @@
         });
       }, { passive: true });
       document.addEventListener("visibilitychange", () => {
-        if (document.visibilityState === "visible") refresh(false);
+        if (document.visibilityState === "visible") refresh();
       });
     }
 
     initPWA();
     loadFilterState();
     bind();
-    refresh(false);
-    setInterval(() => refresh(false), REFRESH_MS);
+    refresh();
+    setInterval(() => refresh(), REFRESH_MS);
   </script>
 </body>
 </html>
