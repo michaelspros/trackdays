@@ -294,7 +294,7 @@
   <script type="module">
     import ICAL from "https://cdn.jsdelivr.net/npm/ical.js@2.2.1/+esm";
 
-    const FEED_ENDPOINT = new URL("./api/feed", window.location.href);
+    const FEED_ENDPOINTS = ["/api/feed", "./api/feed"];
 
     const FILTER_KEY = "agenda_filter_state_v1";
     const MAX_EVENTS = 100;
@@ -380,17 +380,37 @@
       memory.controller = new AbortController();
       const signal = memory.controller.signal;
 
-      const feedUrl = new URL(FEED_ENDPOINT);
-      if (forceRefresh) feedUrl.searchParams.set("refresh", "1");
-      const res = await fetch(feedUrl, {
-        signal,
-        cache: forceRefresh ? "no-store" : "default"
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return {
-        raw: await res.text(),
-        edgeCache: res.headers.get("X-Trackdays-Edge-Cache") || "UNKNOWN"
-      };
+      const candidates = [
+        ...new Set(
+          FEED_ENDPOINTS.map((path) =>
+            new URL(path, path.startsWith("/") ? window.location.origin : window.location.href).toString()
+          )
+        )
+      ];
+      let lastError = null;
+
+      for (const candidate of candidates) {
+        const feedUrl = new URL(candidate);
+        if (forceRefresh) feedUrl.searchParams.set("refresh", "1");
+
+        const res = await fetch(feedUrl, {
+          signal,
+          cache: forceRefresh ? "no-store" : "default"
+        });
+
+        if (res.status === 404) {
+          lastError = new Error(`HTTP ${res.status}`);
+          continue;
+        }
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return {
+          raw: await res.text(),
+          edgeCache: res.headers.get("X-Trackdays-Edge-Cache") || "UNKNOWN"
+        };
+      }
+
+      throw lastError || new Error("Calendar feed endpoint not found");
     }
 
     function parseAndExpand(raw) {
