@@ -294,7 +294,7 @@
   <script type="module">
     import ICAL from "https://cdn.jsdelivr.net/npm/ical.js@2.2.1/+esm";
 
-    const FEED_ENDPOINT = "/api/feed";
+    const FEED_ENDPOINT = new URL("./api/feed", window.location.href);
 
     const FILTER_KEY = "agenda_filter_state_v1";
     const MAX_EVENTS = 100;
@@ -380,7 +380,8 @@
       memory.controller = new AbortController();
       const signal = memory.controller.signal;
 
-      const feedUrl = forceRefresh ? `${FEED_ENDPOINT}?refresh=1` : FEED_ENDPOINT;
+      const feedUrl = new URL(FEED_ENDPOINT);
+      if (forceRefresh) feedUrl.searchParams.set("refresh", "1");
       const res = await fetch(feedUrl, {
         signal,
         cache: forceRefresh ? "no-store" : "default"
