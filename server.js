@@ -8,6 +8,12 @@ const ICLOUD_HTTPS_URL = ICLOUD_WEBCAL_URL.replace(/^webcal:/i, 'https:');
 const CACHE_TTL_MS = Number(process.env.CACHE_TTL_MS || 10 * 60 * 1000);
 const CACHE_FILE = path.join(__dirname, 'cache', 'events.json');
 
+const DEFAULT_CACHE_PAYLOAD = {
+  source: ICLOUD_HTTPS_URL,
+  fetchedAt: '1970-01-01T00:00:00.000Z',
+  ics: 'BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//Trackdays//Cache Seed//EN\nEND:VCALENDAR'
+};
+
 const cacheState = {
   data: null,
   inflight: null
@@ -27,6 +33,14 @@ async function readDiskCache() {
 async function writeDiskCache(payload) {
   await fs.mkdir(path.dirname(CACHE_FILE), { recursive: true });
   await fs.writeFile(CACHE_FILE, JSON.stringify(payload, null, 2));
+}
+
+async function ensureCacheFileExists() {
+  try {
+    await fs.access(CACHE_FILE);
+  } catch (_) {
+    await writeDiskCache(DEFAULT_CACHE_PAYLOAD);
+  }
 }
 
 async function fetchCalendarFromSource() {
@@ -125,6 +139,12 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`Trackdays server listening on http://0.0.0.0:${PORT}`);
-});
+ensureCacheFileExists()
+  .catch((err) => {
+    console.error('Failed to initialize cache file', err);
+  })
+  .finally(() => {
+    server.listen(PORT, () => {
+      console.log(`Trackdays server listening on http://0.0.0.0:${PORT}`);
+    });
+  });
