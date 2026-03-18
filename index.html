@@ -295,6 +295,7 @@
     const APP_BASE_PATH = window.location.pathname.includes("/trackdays") ? "/trackdays/" : "/";
     const EVENTS_CACHE_ENDPOINT = `${APP_BASE_PATH}cache/events.json`;
     const REFRESH_ENDPOINT = `${APP_BASE_PATH}api/refresh`;
+    const CAN_CALL_REFRESH_API = ["localhost", "127.0.0.1"].includes(window.location.hostname);
 
     const FILTER_KEY = "agenda_filter_state_v1";
     const REFRESH_MS = 60 * 60 * 1000;
@@ -400,7 +401,7 @@
         ? `${EVENTS_CACHE_ENDPOINT}?ts=${Date.now()}`
         : EVENTS_CACHE_ENDPOINT;
 
-      if (forceRefresh) {
+      if (forceRefresh && CAN_CALL_REFRESH_API) {
         const refreshRes = await fetch(REFRESH_ENDPOINT, { method: "POST", signal, cache: "no-store" });
         if (refreshRes.ok) {
           const payload = await refreshRes.json();
