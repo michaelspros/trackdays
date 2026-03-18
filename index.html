@@ -292,8 +292,9 @@
   </main>
 
   <script type="module">
-    const EVENTS_CACHE_ENDPOINT = "/api/events.json";
-    const REFRESH_ENDPOINT = "/api/refresh";
+    const EVENTS_CACHE_ENDPOINT = "./cache/events.json";
+    const REFRESH_ENDPOINT = "./api/refresh";
+    const IS_LOCAL_SERVER = ["localhost", "127.0.0.1"].includes(window.location.hostname);
 
     const FILTER_KEY = "agenda_filter_state_v1";
     const REFRESH_MS = 60 * 60 * 1000;
@@ -395,9 +396,19 @@
       memory.controller = new AbortController();
       const signal = memory.controller.signal;
 
-      const endpoint = forceRefresh ? REFRESH_ENDPOINT : EVENTS_CACHE_ENDPOINT;
-      const method = forceRefresh ? "POST" : "GET";
-      const res = await fetch(endpoint, { method, signal, cache: "no-store" });
+      const cacheUrl = forceRefresh
+        ? `${EVENTS_CACHE_ENDPOINT}?ts=${Date.now()}`
+        : EVENTS_CACHE_ENDPOINT;
+
+      if (forceRefresh && IS_LOCAL_SERVER) {
+        const refreshRes = await fetch(REFRESH_ENDPOINT, { method: "POST", signal, cache: "no-store" });
+        if (refreshRes.ok) {
+          const payload = await refreshRes.json();
+          return normalizeServerEvents(payload.events);
+        }
+      }
+
+      const res = await fetch(cacheUrl, { method: "GET", signal, cache: "no-store" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const payload = await res.json();
       return normalizeServerEvents(payload.events);
