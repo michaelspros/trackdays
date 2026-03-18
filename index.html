@@ -294,11 +294,9 @@
   <script type="module">
     import ICAL from "https://cdn.jsdelivr.net/npm/ical.js@2.2.1/+esm";
 
-    const ICLOUD_WEBCAL_URL = "webcal://p130-caldav.icloud.com/published/2/MTA3OTI1Njk2NjEwNzkyNcZXCPkEBGXyRNljfcPcFp-zudFWU4bonEzIBQUcBqD65_CQJzxTgU71zUDgJ5PLydLI54MLZpM0KcK7zgNS1Yo";
-    const ICLOUD_HTTPS_URL = ICLOUD_WEBCAL_URL.replace(/^webcal:/i, "https:");
+    const FEED_ENDPOINT = "/api/feed";
 
     const FILTER_KEY = "agenda_filter_state_v1";
-    const REFRESH_MS = 60 * 60 * 1000;
     const MAX_EVENTS = 100;
     const EXPAND_DAYS = 90;
     const GROUPS = ["Today", "Tomorrow", "This Week", "Next Week", "Later"];
@@ -377,22 +375,21 @@
       }, 120);
     }
 
-    async function fetchICS() {
+    async function fetchICS({ forceRefresh = false } = {}) {
       if (memory.controller) memory.controller.abort();
       memory.controller = new AbortController();
       const signal = memory.controller.signal;
 
-      const tryFetch = async (url) => {
-        const res = await fetch(url, { signal, cache: "no-store" });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.text();
+      const feedUrl = forceRefresh ? `${FEED_ENDPOINT}?refresh=1` : FEED_ENDPOINT;
+      const res = await fetch(feedUrl, {
+        signal,
+        cache: forceRefresh ? "no-store" : "default"
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return {
+        raw: await res.text(),
+        edgeCache: res.headers.get("X-Trackdays-Edge-Cache") || "UNKNOWN"
       };
-
-      try {
-        return await tryFetch(ICLOUD_HTTPS_URL);
-      } catch (_) {
-        return tryFetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(ICLOUD_HTTPS_URL)}`);
-      }
     }
 
     function parseAndExpand(raw) {
@@ -584,14 +581,16 @@
       setState(`Updated ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}${virtualMsg}`);
     }
 
-    async function refresh() {
+    async function refresh({ forceRefresh = false } = {}) {
       try {
         refreshBtnEl.disabled = true;
         if (!memory.events.length) showSkeleton();
-        setState("Loading…");
-        const raw = await fetchICS();
+        setState(forceRefresh ? "Refreshing feed…" : "Loading from cache…");
+        const { raw, edgeCache } = await fetchICS({ forceRefresh });
         memory.events = parseAndExpand(raw);
         render(memory.events);
+        const cacheMsg = edgeCache ? ` · Edge cache: ${edgeCache}` : "";
+        setState(`Updated ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}${cacheMsg}`);
       } catch (err) {
         sectionsEl.innerHTML = `<div class="error">Could not load calendar</div>`;
         setState("Error loading events");
@@ -606,7 +605,7 @@
         render(memory.events);
       });
       refreshBtnEl.addEventListener("click", () => {
-        refresh();
+        refresh({ forceRefresh: true });
       });
       window.addEventListener("resize", debounceResize, { passive: true });
       window.addEventListener("scroll", () => {
@@ -617,16 +616,12 @@
           render(memory.events);
         });
       }, { passive: true });
-      document.addEventListener("visibilitychange", () => {
-        if (document.visibilityState === "visible") refresh();
-      });
     }
 
     initPWA();
     loadFilterState();
     bind();
     refresh();
-    setInterval(() => refresh(), REFRESH_MS);
   </script>
 </body>
 </html>
