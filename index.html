@@ -292,10 +292,10 @@
   </main>
 
   <script type="module">
-    import ICAL from "https://cdn.jsdelivr.net/npm/ical.js@2.2.1/+esm";
-
-    const ICLOUD_WEBCAL_URL = "webcal://p130-caldav.icloud.com/published/2/MTA3OTI1Njk2NjEwNzkyNcZXCPkEBGXyRNljfcPcFp-zudFWU4bonEzIBQUcBqD65_CQJzxTgU71zUDgJ5PLydLI54MLZpM0KcK7zgNS1Yo";
-    const ICLOUD_HTTPS_URL = ICLOUD_WEBCAL_URL.replace(/^webcal:/i, "https:");
+    const APP_BASE_PATH = window.location.pathname.includes("/trackdays") ? "/trackdays/" : "/";
+    const EVENTS_CACHE_ENDPOINT = `${APP_BASE_PATH}cache/events.json`;
+    const REFRESH_ENDPOINT = `${APP_BASE_PATH}api/refresh`;
+    const CAN_CALL_REFRESH_API = ["localhost", "127.0.0.1"].includes(window.location.hostname);
 
     const FILTER_KEY = "agenda_filter_state_v1";
     const REFRESH_MS = 60 * 60 * 1000;
@@ -377,80 +377,42 @@
       }, 120);
     }
 
-    async function fetchICS() {
+    function normalizeServerEvents(events) {
+      return (events || [])
+        .map((e) => ({
+          uid: e.uid || `${e.title || "event"}-${e.start || e.date || ""}`,
+          title: (e.title || "Untitled").trim() || "Untitled",
+          start: e.start ? new Date(e.start) : (e.date ? new Date(`${e.date}T00:00:00`) : null),
+          end: e.end ? new Date(e.end) : null,
+          allDay: !!e.allDay,
+          location: (e.location || "").trim()
+        }))
+        .filter((e) => e.start && !Number.isNaN(e.start.getTime()))
+        .sort((a, b) => a.start - b.start)
+        .slice(0, MAX_EVENTS);
+    }
+
+    async function fetchEvents(forceRefresh = false) {
       if (memory.controller) memory.controller.abort();
       memory.controller = new AbortController();
       const signal = memory.controller.signal;
 
-      const tryFetch = async (url) => {
-        const res = await fetch(url, { signal, cache: "no-store" });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.text();
-      };
+      const cacheUrl = forceRefresh
+        ? `${EVENTS_CACHE_ENDPOINT}?ts=${Date.now()}`
+        : EVENTS_CACHE_ENDPOINT;
 
-      try {
-        return await tryFetch(ICLOUD_HTTPS_URL);
-      } catch (_) {
-        return tryFetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(ICLOUD_HTTPS_URL)}`);
-      }
-    }
-
-    function parseAndExpand(raw) {
-      const now = new Date();
-      const until = new Date(now.getTime() + EXPAND_DAYS * 86400000);
-      const jcal = ICAL.parse(raw);
-      const comp = new ICAL.Component(jcal);
-      const vevents = comp.getAllSubcomponents("vevent");
-      const out = [];
-
-      for (const ve of vevents) {
-        const event = new ICAL.Event(ve);
-        if (event.isRecurrenceException()) continue;
-
-        const collect = (startT, endT) => {
-          if (!startT) return;
-          const startDate = startT.toJSDate();
-          const endDate = (endT || startT).toJSDate();
-          if (endDate < now) return;
-          out.push({
-            uid: event.uid,
-            title: (event.summary || "Untitled").trim() || "Untitled",
-            start: startDate,
-            end: endDate,
-            allDay: !!startT.isDate,
-            location: (event.location || "").trim()
-          });
-        };
-
-        if (event.isRecurring()) {
-          const iterator = event.iterator();
-          let next;
-          let safe = 0;
-          while ((next = iterator.next()) && safe < 1200) {
-            safe++;
-            const occStart = next.toJSDate();
-            if (occStart > until) break;
-            const details = event.getOccurrenceDetails(next);
-            collect(details.startDate, details.endDate);
-            if (out.length >= MAX_EVENTS * 3) break;
-          }
-        } else {
-          collect(event.startDate, event.endDate);
+      if (forceRefresh && CAN_CALL_REFRESH_API) {
+        const refreshRes = await fetch(REFRESH_ENDPOINT, { method: "POST", signal, cache: "no-store" });
+        if (refreshRes.ok) {
+          const payload = await refreshRes.json();
+          return normalizeServerEvents(payload.events);
         }
-        if (out.length >= MAX_EVENTS * 3) break;
       }
 
-      out.sort((a, b) => a.start - b.start);
-      const dedupe = [];
-      const seen = new Set();
-      for (const e of out) {
-        const key = `${e.uid}|${e.start.getTime()}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        dedupe.push(e);
-        if (dedupe.length >= MAX_EVENTS) break;
-      }
-      return dedupe;
+      const res = await fetch(cacheUrl, { method: "GET", signal, cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const payload = await res.json();
+      return normalizeServerEvents(payload.events);
     }
 
     function isSameDay(a, b) {
@@ -584,13 +546,12 @@
       setState(`Updated ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}${virtualMsg}`);
     }
 
-    async function refresh() {
+    async function refresh(forceRefresh = false) {
       try {
         refreshBtnEl.disabled = true;
         if (!memory.events.length) showSkeleton();
         setState("Loading…");
-        const raw = await fetchICS();
-        memory.events = parseAndExpand(raw);
+        memory.events = await fetchEvents(forceRefresh);
         render(memory.events);
       } catch (err) {
         sectionsEl.innerHTML = `<div class="error">Could not load calendar</div>`;
@@ -606,7 +567,7 @@
         render(memory.events);
       });
       refreshBtnEl.addEventListener("click", () => {
-        refresh();
+        refresh(true);
       });
       window.addEventListener("resize", debounceResize, { passive: true });
       window.addEventListener("scroll", () => {
