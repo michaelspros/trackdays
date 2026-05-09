@@ -292,17 +292,12 @@
   </main>
 
   <script type="module">
-    import ICAL from "https://cdn.jsdelivr.net/npm/ical.js@2.2.1/+esm";
-
-    const ICLOUD_WEBCAL_URL = "webcal://p130-caldav.icloud.com/published/2/MTA3OTI1Njk2NjEwNzkyNcZXCPkEBGXyRNljfcPcFp-zudFWU4bonEzIBQUcBqD65_CQJzxTgU71zUDgJ5PLydLI54MLZpM0KcK7zgNS1Yo";
-    const ICLOUD_HTTPS_URL = ICLOUD_WEBCAL_URL.replace(/^webcal:/i, "https:");
+    const CALENDAR_JSON_URL = "calendar.json";
+    const REFRESH_ENDPOINT = "refresh.php";
 
     const FILTER_KEY = "agenda_filter_state_v1";
-    const FEED_CACHE_KEY = "agenda_feed_cache_v1";
-    const FEED_CACHE_TTL_MS = 15 * 60 * 1000;
     const REFRESH_MS = 60 * 60 * 1000;
     const MAX_EVENTS = 100;
-    const EXPAND_DAYS = 90;
     const GROUPS = ["Today", "Tomorrow", "This Week", "Next Week", "Later"];
 
     const stateEl = document.getElementById("state");
@@ -355,22 +350,6 @@
       localStorage.setItem(FILTER_KEY, JSON.stringify({ next30: next30El.checked }));
     }
 
-    function loadFeedCache() {
-      try {
-        const raw = localStorage.getItem(FEED_CACHE_KEY);
-        if (!raw) return null;
-        const parsed = JSON.parse(raw);
-        if (!parsed?.ics || typeof parsed.fetchedAt !== "number") return null;
-        return parsed;
-      } catch (_) {
-        return null;
-      }
-    }
-
-    function saveFeedCache(ics) {
-      localStorage.setItem(FEED_CACHE_KEY, JSON.stringify({ ics, fetchedAt: Date.now() }));
-    }
-
     function showSkeleton() {
       const frag = document.createDocumentFragment();
       const wrap = document.createElement("div");
@@ -395,96 +374,61 @@
       }, 120);
     }
 
-    async function fetchICS({ force = false } = {}) {
+    async function fetchCalendarJson() {
       if (memory.controller) memory.controller.abort();
       memory.controller = new AbortController();
-      const signal = memory.controller.signal;
-      const cached = loadFeedCache();
-      const cacheAge = cached ? Date.now() - cached.fetchedAt : Infinity;
-      const hasFreshCache = cacheAge < FEED_CACHE_TTL_MS;
-
-      if (!force && hasFreshCache) {
-        return { ics: cached.ics, source: "cache" };
+      const res = await fetch(`${CALENDAR_JSON_URL}?t=${Date.now()}`, {
+        signal: memory.controller.signal,
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        const err = new Error(`HTTP ${res.status}`);
+        err.status = res.status;
+        throw err;
       }
-
-      const tryFetch = async (url) => {
-        const res = await fetch(url, { signal, cache: "no-store" });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.text();
-      };
-
-      try {
-        const ics = await tryFetch(ICLOUD_HTTPS_URL);
-        saveFeedCache(ics);
-        return { ics, source: "network" };
-      } catch (primaryErr) {
-        try {
-          const ics = await tryFetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(ICLOUD_HTTPS_URL)}`);
-          saveFeedCache(ics);
-          return { ics, source: "network" };
-        } catch (_) {
-          if (cached?.ics) return { ics: cached.ics, source: "stale-cache" };
-          throw primaryErr;
-        }
-      }
+      return res.json();
     }
 
-    function parseAndExpand(raw) {
+    async function triggerServerRefresh() {
+      const res = await fetch(REFRESH_ENDPOINT, { method: "POST", cache: "no-store" });
+      if (!res.ok) {
+        let detail = "";
+        try { detail = (await res.json())?.error || ""; } catch (_) {}
+        throw new Error(detail || `Refresh failed (${res.status})`);
+      }
+      return res.json();
+    }
+
+    function normalizeEvents(payload) {
       const now = new Date();
-      const until = new Date(now.getTime() + EXPAND_DAYS * 86400000);
-      const jcal = ICAL.parse(raw);
-      const comp = new ICAL.Component(jcal);
-      const vevents = comp.getAllSubcomponents("vevent");
+      const events = Array.isArray(payload?.events) ? payload.events : [];
       const out = [];
-
-      for (const ve of vevents) {
-        const event = new ICAL.Event(ve);
-        if (event.isRecurrenceException()) continue;
-
-        const collect = (startT, endT) => {
-          if (!startT) return;
-          const startDate = startT.toJSDate();
-          const endDate = (endT || startT).toJSDate();
-          if (endDate < now) return;
-          out.push({
-            uid: event.uid,
-            title: (event.summary || "Untitled").trim() || "Untitled",
-            start: startDate,
-            end: endDate,
-            allDay: !!startT.isDate,
-            location: (event.location || "").trim()
-          });
-        };
-
-        if (event.isRecurring()) {
-          const iterator = event.iterator();
-          let next;
-          let safe = 0;
-          while ((next = iterator.next()) && safe < 1200) {
-            safe++;
-            const occStart = next.toJSDate();
-            if (occStart > until) break;
-            const details = event.getOccurrenceDetails(next);
-            collect(details.startDate, details.endDate);
-            if (out.length >= MAX_EVENTS * 3) break;
-          }
-        } else {
-          collect(event.startDate, event.endDate);
-        }
-        if (out.length >= MAX_EVENTS * 3) break;
+      for (const e of events) {
+        const start = parseEventDate(e.start, e.allDay);
+        if (!start) continue;
+        const end = parseEventDate(e.end, e.allDay) || start;
+        if (end < now && !isSameDay(start, now)) continue;
+        out.push({
+          uid: e.uid || "",
+          title: (e.title || "Untitled").trim() || "Untitled",
+          location: (e.location || "").trim(),
+          start,
+          end,
+          allDay: !!e.allDay,
+        });
       }
-
       out.sort((a, b) => a.start - b.start);
-      const dedupe = [];
-      const seen = new Set();
-      for (const e of out) {
-        const key = `${e.uid}|${e.start.getTime()}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        dedupe.push(e);
-        if (dedupe.length >= MAX_EVENTS) break;
+      return out.slice(0, MAX_EVENTS);
+    }
+
+    function parseEventDate(value, allDay) {
+      if (!value) return null;
+      if (allDay && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        const [y, m, d] = value.split("-").map(Number);
+        return new Date(y, m - 1, d);
       }
-      return dedupe;
+      const d = new Date(value);
+      return isNaN(d.getTime()) ? null : d;
     }
 
     function isSameDay(a, b) {
@@ -615,25 +559,49 @@
 
       sectionsEl.replaceChildren(frag);
       const virtualMsg = memory.virtualState.enabled ? ` · Virtualized ${win.start + 1}-${Math.min(win.end, filtered.length)} / ${filtered.length}` : "";
-      setState(`Updated ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}${virtualMsg}`);
+      const stamp = memory.fetchedAt ? new Date(memory.fetchedAt) : new Date();
+      const stampText = isNaN(stamp.getTime())
+        ? new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        : stamp.toLocaleString([], { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+      setState(`Updated ${stampText}${virtualMsg}`);
+    }
+
+    async function loadFromJson({ allowAutoRefresh = true } = {}) {
+      try {
+        const payload = await fetchCalendarJson();
+        memory.events = normalizeEvents(payload);
+        memory.fetchedAt = payload?.fetchedAt || null;
+        render(memory.events);
+        return true;
+      } catch (err) {
+        if (err?.status === 404 && allowAutoRefresh) {
+          return refresh({ force: true });
+        }
+        sectionsEl.innerHTML = `<div class="error">Could not load calendar</div>`;
+        setState("Error loading events");
+        return false;
+      }
     }
 
     async function refresh({ force = false } = {}) {
       try {
         refreshBtnEl.disabled = true;
         if (!memory.events.length) showSkeleton();
-        setState("Loading…");
-        const result = await fetchICS({ force });
-        memory.events = parseAndExpand(result.ics);
-        render(memory.events);
-        if (result.source === "cache") {
-          setState(`${stateEl.textContent} · Cached`);
-        } else if (result.source === "stale-cache") {
-          setState(`${stateEl.textContent} · Offline cache`);
+        if (force) {
+          setState("Refreshing from iCloud…");
+          const payload = await triggerServerRefresh();
+          memory.events = normalizeEvents(payload);
+          memory.fetchedAt = payload?.fetchedAt || null;
+          render(memory.events);
+        } else {
+          setState("Loading…");
+          await loadFromJson();
         }
+        return true;
       } catch (err) {
-        sectionsEl.innerHTML = `<div class="error">Could not load calendar</div>`;
+        sectionsEl.innerHTML = `<div class="error">Could not load calendar${err?.message ? `: ${err.message}` : ""}</div>`;
         setState("Error loading events");
+        return false;
       } finally {
         refreshBtnEl.disabled = false;
       }
