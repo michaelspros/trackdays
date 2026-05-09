@@ -238,6 +238,38 @@
       text-overflow: ellipsis;
     }
 
+    .card-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 10px;
+    }
+
+    .ics-btn {
+      appearance: none;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--accent);
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 6px 10px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: background .15s ease, transform .15s ease;
+    }
+
+    .ics-btn:hover {
+      background: color-mix(in srgb, var(--accent) 10%, transparent);
+    }
+
+    .ics-btn:active { transform: scale(0.98); }
+
+    .card.past {
+      opacity: 0.78;
+    }
+
     .empty, .error {
       margin-top: 16px;
       border: 1px dashed var(--border);
@@ -279,9 +311,9 @@
       <h1 class="title">Trackdays</h1>
       <div class="filters">
         <label class="switch">
-          <input id="next30" type="checkbox" />
+          <input id="showPast" type="checkbox" />
           <span class="track"></span>
-          <span>Next 30 days only</span>
+          <span>Show past events</span>
         </label>
         <button id="refreshBtn" class="refresh-btn" type="button">Refresh feed</button>
       </div>
@@ -295,14 +327,14 @@
     const CALENDAR_JSON_URL = "calendar.json";
     const REFRESH_ENDPOINT = "refresh.php";
 
-    const FILTER_KEY = "agenda_filter_state_v1";
+    const FILTER_KEY = "agenda_filter_state_v2";
     const REFRESH_MS = 60 * 60 * 1000;
     const MAX_EVENTS = 100;
-    const GROUPS = ["Today", "Tomorrow", "This Week", "Next Week", "Later"];
+    const GROUPS = ["Past", "Today", "Tomorrow", "This Week", "Next Week", "Later"];
 
     const stateEl = document.getElementById("state");
     const sectionsEl = document.getElementById("sections");
-    const next30El = document.getElementById("next30");
+    const showPastEl = document.getElementById("showPast");
     const refreshBtnEl = document.getElementById("refreshBtn");
 
     const memory = {
@@ -342,12 +374,12 @@
         const raw = localStorage.getItem(FILTER_KEY);
         if (!raw) return;
         const parsed = JSON.parse(raw);
-        next30El.checked = !!parsed.next30;
+        showPastEl.checked = !!parsed.showPast;
       } catch (_) {}
     }
 
     function saveFilterState() {
-      localStorage.setItem(FILTER_KEY, JSON.stringify({ next30: next30El.checked }));
+      localStorage.setItem(FILTER_KEY, JSON.stringify({ showPast: showPastEl.checked }));
     }
 
     function showSkeleton() {
@@ -400,14 +432,12 @@
     }
 
     function normalizeEvents(payload) {
-      const now = new Date();
       const events = Array.isArray(payload?.events) ? payload.events : [];
       const out = [];
       for (const e of events) {
         const start = parseEventDate(e.start, e.allDay);
         if (!start) continue;
         const end = parseEventDate(e.end, e.allDay) || start;
-        if (end < now && !isSameDay(start, now)) continue;
         out.push({
           uid: e.uid || "",
           title: (e.title || "Untitled").trim() || "Untitled",
@@ -449,6 +479,7 @@
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
 
+      if (date < today) return "Past";
       if (isSameDay(date, today)) return "Today";
       if (isSameDay(date, tomorrow)) return "Tomorrow";
 
@@ -471,13 +502,68 @@
     }
 
     function applyFilters(events) {
-      const now = new Date();
-      const max30 = new Date(now.getTime() + 30 * 86400000);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
       return events.filter((e) => {
-        if (e.start < now) return false;
-        if (next30El.checked && e.start > max30) return false;
+        if (!showPastEl.checked && e.start < today) return false;
         return true;
       });
+    }
+
+    function pad(n, w = 2) {
+      return String(n).padStart(w, "0");
+    }
+
+    function icsDate(date, allDay) {
+      if (allDay) {
+        return `${pad(date.getFullYear(), 4)}${pad(date.getMonth() + 1)}${pad(date.getDate())}`;
+      }
+      return `${pad(date.getUTCFullYear(), 4)}${pad(date.getUTCMonth() + 1)}${pad(date.getUTCDate())}T${pad(date.getUTCHours())}${pad(date.getUTCMinutes())}${pad(date.getUTCSeconds())}Z`;
+    }
+
+    function icsEscape(value) {
+      return String(value || "")
+        .replace(/\\/g, "\\\\")
+        .replace(/;/g, "\\;")
+        .replace(/,/g, "\\,")
+        .replace(/\r?\n/g, "\\n");
+    }
+
+    function buildIcs(event) {
+      const dtstart = icsDate(event.start, event.allDay);
+      const endDate = event.end || event.start;
+      const dtend = icsDate(endDate, event.allDay);
+      const uid = event.uid || `${dtstart}-${Math.random().toString(36).slice(2)}@trackdays`;
+      const stamp = icsDate(new Date(), false);
+      const lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Trackdays//EN",
+        "CALSCALE:GREGORIAN",
+        "BEGIN:VEVENT",
+        `UID:${icsEscape(uid)}`,
+        `DTSTAMP:${stamp}`,
+        event.allDay ? `DTSTART;VALUE=DATE:${dtstart}` : `DTSTART:${dtstart}`,
+        event.allDay ? `DTEND;VALUE=DATE:${dtend}` : `DTEND:${dtend}`,
+        `SUMMARY:${icsEscape(event.title)}`,
+      ];
+      if (event.location) lines.push(`LOCATION:${icsEscape(event.location)}`);
+      lines.push("END:VEVENT", "END:VCALENDAR");
+      return lines.join("\r\n");
+    }
+
+    function downloadIcs(event) {
+      const ics = buildIcs(event);
+      const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const slug = (event.title || "event").replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").slice(0, 50) || "event";
+      a.download = `${slug}.ics`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
     function virtualWindow(size) {
@@ -514,6 +600,9 @@
       const groups = new Map(GROUPS.map((g) => [g, []]));
       for (const event of picked) groups.get(groupForDate(event.start)).push(event);
 
+      const past = groups.get("Past");
+      if (past && past.length) past.sort((a, b) => b.start - a.start);
+
       const frag = document.createDocumentFragment();
       for (const key of GROUPS) {
         const arr = groups.get(key);
@@ -533,6 +622,7 @@
         for (const e of arr) {
           const card = document.createElement("article");
           card.className = "card";
+          if (key === "Past") card.classList.add("past");
 
           const locationHeading = document.createElement("h3");
           locationHeading.className = "event-title";
@@ -548,6 +638,17 @@
           titleDetail.className = "event-location";
           titleDetail.textContent = e.title;
           card.appendChild(titleDetail);
+
+          const actions = document.createElement("div");
+          actions.className = "card-actions";
+          const icsBtn = document.createElement("button");
+          icsBtn.type = "button";
+          icsBtn.className = "ics-btn";
+          icsBtn.textContent = "Add to calendar";
+          icsBtn.setAttribute("aria-label", `Add ${e.title} to calendar`);
+          icsBtn.addEventListener("click", () => downloadIcs(e));
+          actions.appendChild(icsBtn);
+          card.appendChild(actions);
 
           list.appendChild(card);
           requestAnimationFrame(() => card.classList.add("visible"));
@@ -608,7 +709,7 @@
     }
 
     function bind() {
-      next30El.addEventListener("change", () => {
+      showPastEl.addEventListener("change", () => {
         saveFilterState();
         render(memory.events);
       });
