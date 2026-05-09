@@ -609,9 +609,6 @@
       const groups = new Map(GROUPS.map((g) => [g, []]));
       for (const event of picked) groups.get(groupForDate(event.start)).push(event);
 
-      const past = groups.get("Past");
-      if (past && past.length) past.sort((a, b) => b.start - a.start);
-
       const frag = document.createDocumentFragment();
       for (const key of GROUPS) {
         const arr = groups.get(key);
