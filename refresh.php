@@ -6,7 +6,7 @@ header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 
 const ENV_FILE = __DIR__ . '/.env';
-const OUTPUT_FILE = __DIR__ . '/calendar.json';
+const LEGACY_OUTPUT_FILE = __DIR__ . '/calendar.json';
 
 function fail(int $status, string $message, array $extra = []): never
 {
@@ -45,18 +45,78 @@ function loadEnv(string $path): array
     return $env;
 }
 
-function requireIcsUrl(): string
+function slugify(string $label): string
+{
+    $slug = strtolower($label);
+    $slug = preg_replace('/[^a-z0-9]+/', '-', $slug) ?? '';
+    $slug = trim($slug, '-');
+    return $slug;
+}
+
+function feedFilename(string $slug): string
+{
+    return __DIR__ . '/calendar-' . $slug . '.json';
+}
+
+function loadFeeds(): array
 {
     $env = loadEnv(ENV_FILE);
-    $url = $env['ICS_URL'] ?? getenv('ICS_URL') ?: '';
-    if ($url === '') {
-        fail(500, 'ICS_URL is not configured. Set ICS_URL in .env');
+
+    $feeds = [];
+    $usedSlugs = [];
+
+    $indices = [];
+    foreach ($env as $key => $_) {
+        if (preg_match('/^ICS_FEED_([A-Za-z0-9]+)_LABEL$/', $key, $m)) {
+            $indices[] = $m[1];
+        }
     }
+    sort($indices, SORT_NATURAL);
+
+    foreach ($indices as $idx) {
+        $label = trim((string) ($env["ICS_FEED_{$idx}_LABEL"] ?? ''));
+        $url = trim((string) ($env["ICS_FEED_{$idx}_URL"] ?? ''));
+        if ($label === '' || $url === '') continue;
+
+        $slug = slugify($label);
+        if ($slug === '') $slug = 'feed-' . strtolower((string) $idx);
+        $base = $slug;
+        $n = 2;
+        while (isset($usedSlugs[$slug])) {
+            $slug = $base . '-' . $n++;
+        }
+        $usedSlugs[$slug] = true;
+
+        $feeds[] = ['label' => $label, 'url' => $url, 'slug' => $slug];
+    }
+
+    if (!$feeds) {
+        $legacy = trim((string) ($env['ICS_URL'] ?? getenv('ICS_URL') ?: ''));
+        if ($legacy !== '') {
+            $feeds[] = ['label' => 'Default', 'url' => $legacy, 'slug' => 'default'];
+        }
+    }
+
+    return $feeds;
+}
+
+function findFeed(array $feeds, ?string $slug): ?array
+{
+    if ($slug === null || $slug === '') {
+        return $feeds[0] ?? null;
+    }
+    foreach ($feeds as $feed) {
+        if ($feed['slug'] === $slug) return $feed;
+    }
+    return null;
+}
+
+function validateUrl(string $url): void
+{
     $scheme = parse_url($url, PHP_URL_SCHEME);
     if ($scheme !== 'https') {
-        fail(500, 'ICS_URL must be an https:// URL');
+        fail(500, 'Feed URL must be an https:// URL');
     }
-    return $url;
 }
 
 function fetchIcs(string $url): string
@@ -228,11 +288,48 @@ function parseEvents(string $raw): array
     return $deduped;
 }
 
-$ics = fetchIcs(requireIcsUrl());
+function writeJsonFile(string $path, string $json): void
+{
+    $tmp = $path . '.tmp';
+    if (file_put_contents($tmp, $json, LOCK_EX) === false) {
+        fail(500, 'Failed to write ' . basename($path) . ' (check directory write permissions)');
+    }
+    if (!@rename($tmp, $path)) {
+        @unlink($tmp);
+        fail(500, 'Failed to replace ' . basename($path));
+    }
+}
+
+$feeds = loadFeeds();
+
+$action = $_GET['action'] ?? '';
+if ($action === 'feeds') {
+    $list = array_map(fn($f) => ['label' => $f['label'], 'slug' => $f['slug']], $feeds);
+    echo json_encode([
+        'feeds' => $list,
+        'default' => $feeds[0]['slug'] ?? null,
+    ], JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+if (!$feeds) {
+    fail(500, 'No feeds configured. Set ICS_URL or ICS_FEED_1_LABEL/ICS_FEED_1_URL in .env');
+}
+
+$requestedSlug = isset($_GET['feed']) ? (string) $_GET['feed'] : null;
+$feed = findFeed($feeds, $requestedSlug);
+if (!$feed) {
+    fail(404, 'Unknown feed', ['feed' => $requestedSlug]);
+}
+
+validateUrl($feed['url']);
+
+$ics = fetchIcs($feed['url']);
 $events = parseEvents($ics);
 
 $payload = [
     'fetchedAt' => (new DateTime('now', new DateTimeZone('UTC')))->format(DateTime::ATOM),
+    'feed' => ['label' => $feed['label'], 'slug' => $feed['slug']],
     'count' => count($events),
     'events' => $events,
 ];
@@ -242,13 +339,10 @@ if ($json === false) {
     fail(500, 'Failed to encode JSON', ['detail' => json_last_error_msg()]);
 }
 
-$tmp = OUTPUT_FILE . '.tmp';
-if (file_put_contents($tmp, $json, LOCK_EX) === false) {
-    fail(500, 'Failed to write calendar.json (check directory write permissions)');
-}
-if (!@rename($tmp, OUTPUT_FILE)) {
-    @unlink($tmp);
-    fail(500, 'Failed to replace calendar.json');
+writeJsonFile(feedFilename($feed['slug']), $json);
+
+if ($feed['slug'] === ($feeds[0]['slug'] ?? null)) {
+    writeJsonFile(LEGACY_OUTPUT_FILE, $json);
 }
 
 echo $json;

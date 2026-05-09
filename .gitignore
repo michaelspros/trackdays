@@ -1,3 +1,5 @@
 .env
 calendar.json
+calendar-*.json
 calendar.json.tmp
+calendar-*.json.tmp
