@@ -202,6 +202,15 @@
       opacity: 0;
       transition: box-shadow .22s ease, transform .22s ease;
       will-change: transform, opacity;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .card-content {
+      flex: 1 1 auto;
+      min-width: 0;
     }
 
     .card.visible {
@@ -216,7 +225,7 @@
 
     .event-title {
       margin: 0;
-      font-size: 16px;
+      font-size: 18px;
       line-height: 1.35;
       font-weight: 700;
       letter-spacing: -0.01em;
@@ -225,13 +234,13 @@
 
     .event-date {
       margin: 5px 0 0;
-      font-size: 13px;
+      font-size: 16px;
       color: var(--muted);
     }
 
     .event-location {
       margin: 4px 0 0;
-      font-size: 13px;
+      font-size: 16px;
       color: var(--muted);
       white-space: nowrap;
       overflow: hidden;
@@ -241,7 +250,7 @@
     .card-actions {
       display: flex;
       justify-content: flex-end;
-      margin-top: 10px;
+      flex-shrink: 0;
     }
 
     .ics-btn {
@@ -624,6 +633,9 @@
           card.className = "card";
           if (key === "Past") card.classList.add("past");
 
+          const content = document.createElement("div");
+          content.className = "card-content";
+
           const locationHeading = document.createElement("h3");
           locationHeading.className = "event-title";
           locationHeading.textContent = e.location || e.title;
@@ -632,12 +644,12 @@
           date.className = "event-date";
           date.textContent = formatDate(e.start, e.allDay);
 
-          card.append(locationHeading, date);
-
           const titleDetail = document.createElement("p");
           titleDetail.className = "event-location";
           titleDetail.textContent = e.title;
-          card.appendChild(titleDetail);
+
+          content.append(locationHeading, date, titleDetail);
+          card.appendChild(content);
 
           const actions = document.createElement("div");
           actions.className = "card-actions";
