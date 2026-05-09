@@ -5,7 +5,7 @@ declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 
-const ICS_URL = 'https://p130-caldav.icloud.com/published/2/MTA3OTI1Njk2NjEwNzkyNcZXCPkEBGXyRNljfcPcFp-zudFWU4bonEzIBQUcBqD65_CQJzxTgU71zUDgJ5PLydLI54MLZpM0KcK7zgNS1Yo';
+const ENV_FILE = __DIR__ . '/.env';
 const OUTPUT_FILE = __DIR__ . '/calendar.json';
 
 function fail(int $status, string $message, array $extra = []): never
@@ -13,6 +13,50 @@ function fail(int $status, string $message, array $extra = []): never
     http_response_code($status);
     echo json_encode(array_merge(['error' => $message], $extra), JSON_UNESCAPED_SLASHES);
     exit;
+}
+
+function loadEnv(string $path): array
+{
+    if (!is_file($path) || !is_readable($path)) {
+        return [];
+    }
+    $env = [];
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    if ($lines === false) {
+        return [];
+    }
+    foreach ($lines as $line) {
+        $trimmed = ltrim($line);
+        if ($trimmed === '' || $trimmed[0] === '#') continue;
+        $eq = strpos($trimmed, '=');
+        if ($eq === false) continue;
+        $key = trim(substr($trimmed, 0, $eq));
+        $value = trim(substr($trimmed, $eq + 1));
+        if ($key === '') continue;
+        if (strlen($value) >= 2) {
+            $first = $value[0];
+            $last = $value[strlen($value) - 1];
+            if (($first === '"' && $last === '"') || ($first === "'" && $last === "'")) {
+                $value = substr($value, 1, -1);
+            }
+        }
+        $env[$key] = $value;
+    }
+    return $env;
+}
+
+function requireIcsUrl(): string
+{
+    $env = loadEnv(ENV_FILE);
+    $url = $env['ICS_URL'] ?? getenv('ICS_URL') ?: '';
+    if ($url === '') {
+        fail(500, 'ICS_URL is not configured. Set ICS_URL in .env');
+    }
+    $scheme = parse_url($url, PHP_URL_SCHEME);
+    if ($scheme !== 'https') {
+        fail(500, 'ICS_URL must be an https:// URL');
+    }
+    return $url;
 }
 
 function fetchIcs(string $url): string
@@ -184,7 +228,7 @@ function parseEvents(string $raw): array
     return $deduped;
 }
 
-$ics = fetchIcs(ICS_URL);
+$ics = fetchIcs(requireIcsUrl());
 $events = parseEvents($ics);
 
 $payload = [
