@@ -6,7 +6,8 @@ header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 
 const ENV_FILE = __DIR__ . '/.env';
-const LEGACY_OUTPUT_FILE = __DIR__ . '/calendar.json';
+const DATA_DIR = __DIR__ . '/data';
+const LEGACY_OUTPUT_FILE = DATA_DIR . '/calendar.json';
 
 function fail(int $status, string $message, array $extra = []): never
 {
@@ -55,7 +56,7 @@ function slugify(string $label): string
 
 function feedFilename(string $slug): string
 {
-    return __DIR__ . '/calendar-' . $slug . '.json';
+    return DATA_DIR . '/calendar-' . $slug . '.json';
 }
 
 function loadFeeds(): array
@@ -290,6 +291,10 @@ function parseEvents(string $raw): array
 
 function writeJsonFile(string $path, string $json): void
 {
+    $dir = dirname($path);
+    if (!is_dir($dir) && !@mkdir($dir, 0775, true) && !is_dir($dir)) {
+        fail(500, 'Failed to create data directory');
+    }
     $tmp = $path . '.tmp';
     if (file_put_contents($tmp, $json, LOCK_EX) === false) {
         fail(500, 'Failed to write ' . basename($path) . ' (check directory write permissions)');
