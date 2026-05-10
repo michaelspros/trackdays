@@ -1211,16 +1211,18 @@
           content.append(locationHeading, date, titleDetail);
           card.appendChild(content);
 
-          const actions = document.createElement("div");
-          actions.className = "card-actions";
-          const icsBtn = document.createElement("button");
-          icsBtn.type = "button";
-          icsBtn.className = "ics-btn";
-          icsBtn.textContent = "Add to calendar";
-          icsBtn.setAttribute("aria-label", `Add ${e.title} to calendar`);
-          icsBtn.addEventListener("click", () => downloadIcs(e));
-          actions.appendChild(icsBtn);
-          card.appendChild(actions);
+          if (key !== "Past") {
+            const actions = document.createElement("div");
+            actions.className = "card-actions";
+            const icsBtn = document.createElement("button");
+            icsBtn.type = "button";
+            icsBtn.className = "ics-btn";
+            icsBtn.textContent = "Add to calendar";
+            icsBtn.setAttribute("aria-label", `Add ${e.title} to calendar`);
+            icsBtn.addEventListener("click", () => downloadIcs(e));
+            actions.appendChild(icsBtn);
+            card.appendChild(actions);
+          }
 
           list.appendChild(card);
           requestAnimationFrame(() => card.classList.add("visible"));
