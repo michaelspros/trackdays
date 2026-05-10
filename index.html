@@ -71,11 +71,69 @@
       padding: calc(12px + env(safe-area-inset-top)) 14px 12px;
     }
 
-    .title {
+    .title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
       margin: 0 0 12px;
+      flex-wrap: wrap;
+    }
+
+    .title {
+      margin: 0;
       font-size: 26px;
       font-weight: 750;
       letter-spacing: -0.02em;
+    }
+
+    .feed-select-wrap {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .feed-select-wrap[hidden] { display: none; }
+
+    .feed-select {
+      appearance: none;
+      -webkit-appearance: none;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 8px 30px 8px 14px;
+      cursor: pointer;
+      box-shadow: var(--shadow);
+      transition: transform .2s ease, box-shadow .2s ease;
+      max-width: 220px;
+      text-overflow: ellipsis;
+      font-family: inherit;
+    }
+
+    .feed-select:hover {
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-hover);
+    }
+
+    .feed-select:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .feed-select-wrap::after {
+      content: "";
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      width: 8px;
+      height: 8px;
+      border-right: 2px solid var(--muted);
+      border-bottom: 2px solid var(--muted);
+      transform: translateY(-70%) rotate(45deg);
+      pointer-events: none;
     }
 
     .filters {
@@ -317,7 +375,12 @@
 <body>
   <main class="app">
     <header class="top">
-      <h1 class="title">Trackdays</h1>
+      <div class="title-row">
+        <h1 class="title">Trackdays</h1>
+        <span id="feedSelectWrap" class="feed-select-wrap" hidden>
+          <select id="feedSelect" class="feed-select" aria-label="Calendar feed"></select>
+        </span>
+      </div>
       <div class="filters">
         <label class="switch">
           <input id="showPast" type="checkbox" />
@@ -333,10 +396,11 @@
   </main>
 
   <script type="module">
-    const CALENDAR_JSON_URL = "calendar.json";
     const REFRESH_ENDPOINT = "refresh.php";
+    const FEEDS_ENDPOINT = "refresh.php?action=feeds";
 
     const FILTER_KEY = "agenda_filter_state_v2";
+    const FEED_KEY = "agenda_feed_slug_v1";
     const REFRESH_MS = 60 * 60 * 1000;
     const MAX_EVENTS = 100;
     const GROUPS = ["Past", "Today", "Tomorrow", "This Week", "Next Week", "Later"];
@@ -345,13 +409,21 @@
     const sectionsEl = document.getElementById("sections");
     const showPastEl = document.getElementById("showPast");
     const refreshBtnEl = document.getElementById("refreshBtn");
+    const feedSelectEl = document.getElementById("feedSelect");
+    const feedSelectWrapEl = document.getElementById("feedSelectWrap");
 
     const memory = {
       events: [],
       controller: null,
       resizeTimer: null,
-      virtualState: { start: 0, end: MAX_EVENTS, enabled: false }
+      virtualState: { start: 0, end: MAX_EVENTS, enabled: false },
+      feeds: [],
+      currentFeed: null,
     };
+
+    function calendarUrlFor(slug) {
+      return slug ? `calendar-${encodeURIComponent(slug)}.json` : "calendar.json";
+    }
 
     function initPWA() {
       const manifest = {
@@ -415,10 +487,21 @@
       }, 120);
     }
 
+    async function fetchFeedsList() {
+      try {
+        const res = await fetch(`${FEEDS_ENDPOINT}&t=${Date.now()}`, { cache: "no-store" });
+        if (!res.ok) return { feeds: [], default: null };
+        return await res.json();
+      } catch (_) {
+        return { feeds: [], default: null };
+      }
+    }
+
     async function fetchCalendarJson() {
       if (memory.controller) memory.controller.abort();
       memory.controller = new AbortController();
-      const res = await fetch(`${CALENDAR_JSON_URL}?t=${Date.now()}`, {
+      const url = calendarUrlFor(memory.currentFeed);
+      const res = await fetch(`${url}?t=${Date.now()}`, {
         signal: memory.controller.signal,
         cache: "no-store",
       });
@@ -431,13 +514,51 @@
     }
 
     async function triggerServerRefresh() {
-      const res = await fetch(REFRESH_ENDPOINT, { method: "POST", cache: "no-store" });
+      const url = memory.currentFeed
+        ? `${REFRESH_ENDPOINT}?feed=${encodeURIComponent(memory.currentFeed)}`
+        : REFRESH_ENDPOINT;
+      const res = await fetch(url, { method: "POST", cache: "no-store" });
       if (!res.ok) {
         let detail = "";
         try { detail = (await res.json())?.error || ""; } catch (_) {}
         throw new Error(detail || `Refresh failed (${res.status})`);
       }
       return res.json();
+    }
+
+    function loadSavedFeedSlug() {
+      try { return localStorage.getItem(FEED_KEY); } catch (_) { return null; }
+    }
+
+    function saveFeedSlug(slug) {
+      try { localStorage.setItem(FEED_KEY, slug); } catch (_) {}
+    }
+
+    function populateFeedSelect(feeds, selectedSlug) {
+      feedSelectEl.textContent = "";
+      for (const f of feeds) {
+        const opt = document.createElement("option");
+        opt.value = f.slug;
+        opt.textContent = f.label;
+        if (f.slug === selectedSlug) opt.selected = true;
+        feedSelectEl.appendChild(opt);
+      }
+      feedSelectWrapEl.hidden = feeds.length < 2;
+    }
+
+    async function initFeeds() {
+      const data = await fetchFeedsList();
+      const feeds = Array.isArray(data?.feeds) ? data.feeds : [];
+      memory.feeds = feeds;
+      if (!feeds.length) {
+        memory.currentFeed = null;
+        feedSelectWrapEl.hidden = true;
+        return;
+      }
+      const saved = loadSavedFeedSlug();
+      const exists = feeds.some((f) => f.slug === saved);
+      memory.currentFeed = exists ? saved : (data.default || feeds[0].slug);
+      populateFeedSelect(feeds, memory.currentFeed);
     }
 
     function normalizeEvents(payload) {
@@ -725,6 +846,16 @@
       refreshBtnEl.addEventListener("click", () => {
         refresh({ force: true });
       });
+      feedSelectEl.addEventListener("change", () => {
+        const slug = feedSelectEl.value;
+        if (!slug || slug === memory.currentFeed) return;
+        memory.currentFeed = slug;
+        saveFeedSlug(slug);
+        memory.events = [];
+        showSkeleton();
+        setState("Loading…");
+        refresh();
+      });
       window.addEventListener("resize", debounceResize, { passive: true });
       window.addEventListener("scroll", () => {
         if (!memory.virtualState.enabled) return;
@@ -742,8 +873,11 @@
     initPWA();
     loadFilterState();
     bind();
-    refresh();
-    setInterval(() => refresh(), REFRESH_MS);
+    (async () => {
+      await initFeeds();
+      refresh();
+      setInterval(() => refresh(), REFRESH_MS);
+    })();
   </script>
 </body>
 </html>
