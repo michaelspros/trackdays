@@ -496,7 +496,7 @@
     }
 
     .cal-day {
-      min-height: 88px;
+      min-height: 96px;
       border-radius: 10px;
       padding: 6px;
       display: flex;
@@ -535,15 +535,30 @@
       font-weight: 600;
       background: color-mix(in srgb, var(--accent) 14%, transparent);
       color: var(--accent);
-      padding: 3px 6px;
+      padding: 4px 6px;
       border-radius: 6px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
       cursor: pointer;
       text-align: left;
       width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      line-height: 1.25;
       transition: background .15s ease;
+    }
+
+    .cal-event-title,
+    .cal-event-location {
+      display: block;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .cal-event-location {
+      font-weight: 500;
+      font-size: 10px;
+      opacity: 0.8;
     }
 
     .cal-event:hover {
@@ -555,9 +570,10 @@
     }
 
     @media (max-width: 520px) {
-      .cal-day { min-height: 64px; padding: 4px; }
+      .cal-day { min-height: 72px; padding: 4px; }
       .cal-day-number { font-size: 11px; }
-      .cal-event { font-size: 10px; padding: 2px 4px; }
+      .cal-event { font-size: 10px; padding: 3px 4px; }
+      .cal-event-location { font-size: 9px; }
       .cal-grid { padding: 6px; gap: 3px; }
     }
 
@@ -1062,7 +1078,19 @@
           chip.type = "button";
           chip.className = "cal-event";
           if (e.start < today) chip.classList.add("past");
-          chip.textContent = e.location || e.title;
+
+          const primary = document.createElement("span");
+          primary.className = "cal-event-title";
+          primary.textContent = e.location || e.title;
+          chip.appendChild(primary);
+
+          if (e.location) {
+            const secondary = document.createElement("span");
+            secondary.className = "cal-event-location";
+            secondary.textContent = e.title;
+            chip.appendChild(secondary);
+          }
+
           const tip = e.location && e.location !== e.title ? `${e.title} — ${e.location}` : e.title;
           chip.title = e.allDay ? tip : `${tip} · ${formatDate(e.start, false)}`;
           chip.setAttribute("aria-label", `Add ${e.title} to calendar`);
