@@ -458,6 +458,22 @@
       transform: translateY(0);
     }
 
+    .cal-nav .cal-today {
+      width: auto;
+      padding: 0 14px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+      font-family: inherit;
+    }
+
+    .cal-nav .cal-today:disabled {
+      opacity: 0.5;
+      cursor: default;
+      transform: none;
+      box-shadow: var(--shadow);
+    }
+
     .cal-grid {
       display: grid;
       grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -995,12 +1011,23 @@
       prevBtn.setAttribute("aria-label", "Previous month");
       prevBtn.textContent = "←";
       prevBtn.addEventListener("click", () => shiftMonth(-1));
+      const todayBtn = document.createElement("button");
+      todayBtn.type = "button";
+      todayBtn.className = "cal-today";
+      todayBtn.textContent = "Today";
+      todayBtn.setAttribute("aria-label", "Jump to current month");
+      const currentMonth = firstOfMonth(new Date());
+      todayBtn.disabled = month.getFullYear() === currentMonth.getFullYear() && month.getMonth() === currentMonth.getMonth();
+      todayBtn.addEventListener("click", () => {
+        memory.calendarMonth = firstOfMonth(new Date());
+        render(memory.events);
+      });
       const nextBtn = document.createElement("button");
       nextBtn.type = "button";
       nextBtn.setAttribute("aria-label", "Next month");
       nextBtn.textContent = "→";
       nextBtn.addEventListener("click", () => shiftMonth(1));
-      nav.append(prevBtn, nextBtn);
+      nav.append(prevBtn, todayBtn, nextBtn);
       header.append(monthLabel, nav);
       cal.appendChild(header);
 
