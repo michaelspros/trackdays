@@ -210,12 +210,23 @@
     .switch input:checked + .track { background: var(--accent); }
     .switch input:checked + .track::after { transform: translateX(18px); }
 
+    .state-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 10px 2px 6px;
+      flex-wrap: wrap;
+    }
+
     .state {
       color: var(--muted);
       font-size: 14px;
-      margin: 10px 2px 6px;
       min-height: 22px;
+      flex: 1 1 auto;
     }
+
+    #showPastWrap[hidden] { display: none; }
 
     .sections {
       contain: content;
@@ -599,16 +610,18 @@
         </div>
       </div>
       <div class="filters">
-        <label class="switch">
-          <input id="showPast" type="checkbox" />
-          <span class="track"></span>
-          <span>Show past events</span>
-        </label>
         <button id="refreshBtn" class="refresh-btn" type="button">Refresh</button>
       </div>
     </header>
 
-    <div id="state" class="state">Loading…</div>
+    <div class="state-row">
+      <div id="state" class="state">Loading…</div>
+      <label id="showPastWrap" class="switch">
+        <input id="showPast" type="checkbox" />
+        <span class="track"></span>
+        <span>Show past events</span>
+      </label>
+    </div>
     <section id="sections" class="sections" aria-live="polite"></section>
   </main>
 
@@ -632,6 +645,7 @@
     const feedSelectWrapEl = document.getElementById("feedSelectWrap");
     const viewListBtnEl = document.getElementById("viewListBtn");
     const viewCalendarBtnEl = document.getElementById("viewCalendarBtn");
+    const showPastWrapEl = document.getElementById("showPastWrap");
 
     const memory = {
       events: [],
@@ -711,6 +725,7 @@
       viewCalendarBtnEl.classList.toggle("active", !isList);
       viewListBtnEl.setAttribute("aria-pressed", String(isList));
       viewCalendarBtnEl.setAttribute("aria-pressed", String(!isList));
+      showPastWrapEl.hidden = !isList;
     }
 
     function setView(view) {
