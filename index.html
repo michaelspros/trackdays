@@ -52,6 +52,19 @@
       -webkit-font-smoothing: antialiased;
       text-rendering: optimizeLegibility;
       padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+      -webkit-tap-highlight-color: transparent;
+      -webkit-text-size-adjust: 100%;
+    }
+
+    button, select, label.switch, .ics-btn, .cal-event {
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+    }
+
+    button, label.switch {
+      user-select: none;
+      -webkit-user-select: none;
     }
 
     .app {
@@ -113,9 +126,11 @@
       font-family: inherit;
     }
 
-    .feed-select:hover {
-      transform: translateY(-1px);
-      box-shadow: var(--shadow-hover);
+    @media (hover: hover) {
+      .feed-select:hover {
+        transform: translateY(-1px);
+        box-shadow: var(--shadow-hover);
+      }
     }
 
     .feed-select:focus-visible {
@@ -157,13 +172,16 @@
       transition: transform .2s ease, box-shadow .2s ease;
     }
 
-    .refresh-btn:hover {
-      transform: translateY(-1px);
-      box-shadow: var(--shadow-hover);
+    @media (hover: hover) {
+      .refresh-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: var(--shadow-hover);
+      }
     }
 
     .refresh-btn:active {
       transform: translateY(0);
+      background: color-mix(in srgb, var(--accent) 12%, var(--surface));
     }
 
     .refresh-btn:disabled {
@@ -287,9 +305,11 @@
       transform: translateY(0);
     }
 
-    .card:hover {
-      box-shadow: var(--shadow-hover);
-      transform: translateY(-2px);
+    @media (hover: hover) {
+      .card:hover {
+        box-shadow: var(--shadow-hover);
+        transform: translateY(-2px);
+      }
     }
 
     .event-title {
@@ -460,13 +480,16 @@
       line-height: 1;
     }
 
-    .cal-nav button:hover {
-      transform: translateY(-1px);
-      box-shadow: var(--shadow-hover);
+    @media (hover: hover) {
+      .cal-nav button:hover {
+        transform: translateY(-1px);
+        box-shadow: var(--shadow-hover);
+      }
     }
 
     .cal-nav button:active {
       transform: translateY(0);
+      background: color-mix(in srgb, var(--accent) 12%, var(--surface));
     }
 
     .cal-nav .cal-today {
@@ -586,6 +609,12 @@
       .cal-event { font-size: 10px; padding: 3px 4px; }
       .cal-event-location { font-size: 9px; }
       .cal-grid { padding: 6px; gap: 3px; }
+      .cal-nav button { width: 44px; height: 44px; font-size: 18px; }
+      .cal-nav .cal-today { width: auto; padding: 0 16px; height: 44px; }
+      .refresh-btn, .feed-select { padding: 10px 14px; font-size: 14px; }
+      .feed-select { padding-right: 30px; }
+      .ics-btn { padding: 8px 12px; font-size: 13px; }
+      .view-toggle button { padding: 8px 14px; }
     }
 
     @media (min-width: 680px) {
