@@ -292,12 +292,62 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 12px;
+      gap: 14px;
     }
 
     .card-content {
       flex: 1 1 auto;
       min-width: 0;
+    }
+
+    .date-box {
+      flex-shrink: 0;
+      width: 72px;
+      padding: 8px 6px;
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+      border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      line-height: 1;
+      gap: 4px;
+    }
+
+    .date-box .dow {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+
+    .date-box .day {
+      font-size: 30px;
+      font-weight: 750;
+      color: var(--text);
+      letter-spacing: -0.02em;
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+    }
+
+    .date-box .month {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+
+    .card.past .date-box {
+      background: color-mix(in srgb, var(--muted) 10%, var(--surface));
+      border-color: var(--border);
+    }
+
+    .card.past .date-box .dow {
+      color: var(--muted);
     }
 
     .card.visible {
@@ -321,10 +371,11 @@
       color: var(--text);
     }
 
-    .event-date {
+    .event-time {
       margin: 5px 0 0;
-      font-size: 16px;
+      font-size: 14px;
       color: var(--muted);
+      font-variant-numeric: tabular-nums;
     }
 
     .event-location {
@@ -604,6 +655,9 @@
     }
 
     @media (max-width: 520px) {
+      .date-box { width: 62px; padding: 6px 4px; }
+      .date-box .day { font-size: 26px; }
+      .date-box .dow, .date-box .month { font-size: 10px; }
       .cal-day { min-height: 72px; padding: 4px; }
       .cal-day-number { font-size: 11px; }
       .cal-event { font-size: 10px; padding: 3px 4px; }
@@ -934,6 +988,34 @@
       return `${day} · ${time}`;
     }
 
+    function formatTime(date) {
+      return new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(date);
+    }
+
+    function dateBoxParts(date) {
+      const dow = new Intl.DateTimeFormat(undefined, { weekday: "long" }).format(date);
+      const month = new Intl.DateTimeFormat(undefined, { month: "short" }).format(date);
+      return { dow, day: date.getDate(), month };
+    }
+
+    function buildDateBox(date) {
+      const { dow, day, month } = dateBoxParts(date);
+      const box = document.createElement("div");
+      box.className = "date-box";
+      box.setAttribute("aria-label", `${dow} ${day} ${month}`);
+      const dowEl = document.createElement("span");
+      dowEl.className = "dow";
+      dowEl.textContent = dow;
+      const dayEl = document.createElement("span");
+      dayEl.className = "day";
+      dayEl.textContent = String(day);
+      const monthEl = document.createElement("span");
+      monthEl.className = "month";
+      monthEl.textContent = month;
+      box.append(dowEl, dayEl, monthEl);
+      return box;
+    }
+
     function applyFilters(events) {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -1193,6 +1275,8 @@
           card.className = "card";
           if (key === "Past") card.classList.add("past");
 
+          card.appendChild(buildDateBox(e.start));
+
           const content = document.createElement("div");
           content.className = "card-content";
 
@@ -1200,15 +1284,19 @@
           locationHeading.className = "event-title";
           locationHeading.textContent = e.location || e.title;
 
-          const date = document.createElement("p");
-          date.className = "event-date";
-          date.textContent = formatDate(e.start, e.allDay);
-
           const titleDetail = document.createElement("p");
           titleDetail.className = "event-location";
           titleDetail.textContent = e.title;
 
-          content.append(locationHeading, date, titleDetail);
+          content.append(locationHeading, titleDetail);
+
+          if (!e.allDay) {
+            const time = document.createElement("p");
+            time.className = "event-time";
+            time.textContent = formatTime(e.start);
+            content.appendChild(time);
+          }
+
           card.appendChild(content);
 
           if (key !== "Past") {
