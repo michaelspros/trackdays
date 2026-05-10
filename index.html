@@ -210,12 +210,23 @@
     .switch input:checked + .track { background: var(--accent); }
     .switch input:checked + .track::after { transform: translateX(18px); }
 
+    .state-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 10px 2px 6px;
+      flex-wrap: wrap;
+    }
+
     .state {
       color: var(--muted);
       font-size: 14px;
-      margin: 10px 2px 6px;
       min-height: 22px;
+      flex: 1 1 auto;
     }
+
+    #showPastWrap[hidden] { display: none; }
 
     .sections {
       contain: content;
@@ -366,6 +377,217 @@
       100% { background-position: -200% 0; }
     }
 
+    .view-toggle {
+      display: inline-flex;
+      gap: 2px;
+      padding: 3px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      border-radius: 999px;
+      box-shadow: var(--shadow);
+    }
+
+    .view-toggle button {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: background .15s ease, color .15s ease;
+    }
+
+    .view-toggle button:hover {
+      color: var(--text);
+    }
+
+    .view-toggle button.active {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .title-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .calendar {
+      margin-top: 4px;
+    }
+
+    .cal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 4px 2px 12px;
+    }
+
+    .cal-month {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: var(--text);
+    }
+
+    .cal-nav {
+      display: inline-flex;
+      gap: 8px;
+    }
+
+    .cal-nav button {
+      appearance: none;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: var(--shadow);
+      transition: transform .15s ease, box-shadow .15s ease;
+      font-size: 16px;
+      line-height: 1;
+    }
+
+    .cal-nav button:hover {
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-hover);
+    }
+
+    .cal-nav button:active {
+      transform: translateY(0);
+    }
+
+    .cal-nav .cal-today {
+      width: auto;
+      padding: 0 14px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+      font-family: inherit;
+    }
+
+    .cal-nav .cal-today:disabled {
+      opacity: 0.5;
+      cursor: default;
+      transform: none;
+      box-shadow: var(--shadow);
+    }
+
+    .cal-grid {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 4px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 10px;
+      box-shadow: var(--shadow);
+    }
+
+    .cal-weekday {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--muted);
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      text-align: center;
+      padding: 6px 0 8px;
+    }
+
+    .cal-day {
+      min-height: 96px;
+      border-radius: 10px;
+      padding: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      background: color-mix(in srgb, var(--bg) 60%, transparent);
+      border: 1px solid transparent;
+      overflow: hidden;
+    }
+
+    .cal-day.outside {
+      opacity: 0.35;
+    }
+
+    .cal-day.today {
+      border-color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 10%, transparent);
+    }
+
+    .cal-day-number {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      padding: 0 2px 2px;
+    }
+
+    .cal-day.today .cal-day-number {
+      color: var(--accent);
+    }
+
+    .cal-event {
+      appearance: none;
+      border: 0;
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: 600;
+      background: color-mix(in srgb, var(--accent) 14%, transparent);
+      color: var(--accent);
+      padding: 4px 6px;
+      border-radius: 6px;
+      cursor: pointer;
+      text-align: left;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      line-height: 1.25;
+      transition: background .15s ease;
+    }
+
+    .cal-event-title,
+    .cal-event-location {
+      display: block;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .cal-event-location {
+      font-weight: 500;
+      font-size: 10px;
+      opacity: 0.8;
+    }
+
+    .cal-event:hover {
+      background: color-mix(in srgb, var(--accent) 24%, transparent);
+    }
+
+    .cal-event.past {
+      opacity: 0.55;
+    }
+
+    @media (max-width: 520px) {
+      .cal-day { min-height: 72px; padding: 4px; }
+      .cal-day-number { font-size: 11px; }
+      .cal-event { font-size: 10px; padding: 3px 4px; }
+      .cal-event-location { font-size: 9px; }
+      .cal-grid { padding: 6px; gap: 3px; }
+    }
+
     @media (min-width: 680px) {
       .app { padding: 18px 18px 36px; }
       .top { margin: -18px -18px 14px; padding-left: 18px; padding-right: 18px; }
@@ -377,21 +599,29 @@
     <header class="top">
       <div class="title-row">
         <h1 class="title">Trackdays</h1>
-        <span id="feedSelectWrap" class="feed-select-wrap" hidden>
-          <select id="feedSelect" class="feed-select" aria-label="Calendar feed"></select>
-        </span>
+        <div class="title-actions">
+          <span id="feedSelectWrap" class="feed-select-wrap" hidden>
+            <select id="feedSelect" class="feed-select" aria-label="Calendar feed"></select>
+          </span>
+          <div class="view-toggle" role="group" aria-label="View mode">
+            <button id="viewListBtn" type="button" aria-pressed="true">List</button>
+            <button id="viewCalendarBtn" type="button" aria-pressed="false">Calendar</button>
+          </div>
+        </div>
       </div>
       <div class="filters">
-        <label class="switch">
-          <input id="showPast" type="checkbox" />
-          <span class="track"></span>
-          <span>Show past events</span>
-        </label>
-        <button id="refreshBtn" class="refresh-btn" type="button">Refresh feed</button>
+        <button id="refreshBtn" class="refresh-btn" type="button">Refresh</button>
       </div>
     </header>
 
-    <div id="state" class="state">Loading…</div>
+    <div class="state-row">
+      <div id="state" class="state">Loading…</div>
+      <label id="showPastWrap" class="switch">
+        <input id="showPast" type="checkbox" />
+        <span class="track"></span>
+        <span>Show past events</span>
+      </label>
+    </div>
     <section id="sections" class="sections" aria-live="polite"></section>
   </main>
 
@@ -401,9 +631,11 @@
 
     const FILTER_KEY = "agenda_filter_state_v2";
     const FEED_KEY = "agenda_feed_slug_v1";
+    const VIEW_KEY = "agenda_view_v1";
     const REFRESH_MS = 60 * 60 * 1000;
     const MAX_EVENTS = 100;
     const GROUPS = ["Past", "Today", "Tomorrow", "This Week", "Next Week", "Later"];
+    const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
     const stateEl = document.getElementById("state");
     const sectionsEl = document.getElementById("sections");
@@ -411,6 +643,9 @@
     const refreshBtnEl = document.getElementById("refreshBtn");
     const feedSelectEl = document.getElementById("feedSelect");
     const feedSelectWrapEl = document.getElementById("feedSelectWrap");
+    const viewListBtnEl = document.getElementById("viewListBtn");
+    const viewCalendarBtnEl = document.getElementById("viewCalendarBtn");
+    const showPastWrapEl = document.getElementById("showPastWrap");
 
     const memory = {
       events: [],
@@ -419,7 +654,16 @@
       virtualState: { start: 0, end: MAX_EVENTS, enabled: false },
       feeds: [],
       currentFeed: null,
+      view: "list",
+      calendarMonth: firstOfMonth(new Date()),
     };
+
+    function firstOfMonth(date) {
+      const d = new Date(date);
+      d.setDate(1);
+      d.setHours(0, 0, 0, 0);
+      return d;
+    }
 
     function calendarUrlFor(slug) {
       return slug ? `data/calendar-${encodeURIComponent(slug)}.json` : "data/calendar.json";
@@ -461,6 +705,36 @@
 
     function saveFilterState() {
       localStorage.setItem(FILTER_KEY, JSON.stringify({ showPast: showPastEl.checked }));
+    }
+
+    function loadViewState() {
+      try {
+        const v = localStorage.getItem(VIEW_KEY);
+        if (v === "calendar" || v === "list") memory.view = v;
+      } catch (_) {}
+      updateViewButtons();
+    }
+
+    function saveViewState() {
+      try { localStorage.setItem(VIEW_KEY, memory.view); } catch (_) {}
+    }
+
+    function updateViewButtons() {
+      const isList = memory.view === "list";
+      viewListBtnEl.classList.toggle("active", isList);
+      viewCalendarBtnEl.classList.toggle("active", !isList);
+      viewListBtnEl.setAttribute("aria-pressed", String(isList));
+      viewCalendarBtnEl.setAttribute("aria-pressed", String(!isList));
+      showPastWrapEl.hidden = !isList;
+    }
+
+    function setView(view) {
+      if (memory.view === view) return;
+      memory.view = view;
+      saveViewState();
+      updateViewButtons();
+      memory.virtualState.enabled = false;
+      render(memory.events);
     }
 
     function showSkeleton() {
@@ -714,6 +988,145 @@
     }
 
     function render(events) {
+      if (memory.view === "calendar") {
+        renderCalendar(events);
+      } else {
+        renderList(events);
+      }
+    }
+
+    function dateKey(d) {
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    }
+
+    function bucketByStartDate(events) {
+      const map = new Map();
+      for (const e of events) {
+        const k = dateKey(e.start);
+        if (!map.has(k)) map.set(k, []);
+        map.get(k).push(e);
+      }
+      return map;
+    }
+
+    function shiftMonth(delta) {
+      const m = new Date(memory.calendarMonth);
+      m.setMonth(m.getMonth() + delta);
+      memory.calendarMonth = firstOfMonth(m);
+      render(memory.events);
+    }
+
+    function renderCalendar(events) {
+      const month = memory.calendarMonth;
+      const year = month.getFullYear();
+      const monthIdx = month.getMonth();
+      const startOffset = (new Date(year, monthIdx, 1).getDay() + 6) % 7;
+      const gridStart = new Date(year, monthIdx, 1 - startOffset);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const buckets = bucketByStartDate(events);
+
+      const cal = document.createElement("div");
+      cal.className = "calendar";
+
+      const header = document.createElement("div");
+      header.className = "cal-header";
+      const monthLabel = document.createElement("div");
+      monthLabel.className = "cal-month";
+      monthLabel.textContent = new Intl.DateTimeFormat(undefined, { month: "long", year: "numeric" }).format(month);
+      const nav = document.createElement("div");
+      nav.className = "cal-nav";
+      const prevBtn = document.createElement("button");
+      prevBtn.type = "button";
+      prevBtn.setAttribute("aria-label", "Previous month");
+      prevBtn.textContent = "←";
+      prevBtn.addEventListener("click", () => shiftMonth(-1));
+      const todayBtn = document.createElement("button");
+      todayBtn.type = "button";
+      todayBtn.className = "cal-today";
+      todayBtn.textContent = "Today";
+      todayBtn.setAttribute("aria-label", "Jump to current month");
+      const currentMonth = firstOfMonth(new Date());
+      todayBtn.disabled = month.getFullYear() === currentMonth.getFullYear() && month.getMonth() === currentMonth.getMonth();
+      todayBtn.addEventListener("click", () => {
+        memory.calendarMonth = firstOfMonth(new Date());
+        render(memory.events);
+      });
+      const nextBtn = document.createElement("button");
+      nextBtn.type = "button";
+      nextBtn.setAttribute("aria-label", "Next month");
+      nextBtn.textContent = "→";
+      nextBtn.addEventListener("click", () => shiftMonth(1));
+      nav.append(prevBtn, todayBtn, nextBtn);
+      header.append(monthLabel, nav);
+      cal.appendChild(header);
+
+      const grid = document.createElement("div");
+      grid.className = "cal-grid";
+
+      for (const w of WEEKDAY_LABELS) {
+        const wd = document.createElement("div");
+        wd.className = "cal-weekday";
+        wd.textContent = w;
+        grid.appendChild(wd);
+      }
+
+      for (let i = 0; i < 42; i++) {
+        const day = new Date(gridStart);
+        day.setDate(day.getDate() + i);
+        day.setHours(0, 0, 0, 0);
+
+        const cell = document.createElement("div");
+        cell.className = "cal-day";
+        if (day.getMonth() !== monthIdx) cell.classList.add("outside");
+        if (isSameDay(day, today)) cell.classList.add("today");
+
+        const num = document.createElement("div");
+        num.className = "cal-day-number";
+        num.textContent = day.getDate();
+        cell.appendChild(num);
+
+        const dayEvents = buckets.get(dateKey(day)) || [];
+        for (const e of dayEvents) {
+          const chip = document.createElement("button");
+          chip.type = "button";
+          chip.className = "cal-event";
+          if (e.start < today) chip.classList.add("past");
+
+          const primary = document.createElement("span");
+          primary.className = "cal-event-title";
+          primary.textContent = e.location || e.title;
+          chip.appendChild(primary);
+
+          if (e.location) {
+            const secondary = document.createElement("span");
+            secondary.className = "cal-event-location";
+            secondary.textContent = e.title;
+            chip.appendChild(secondary);
+          }
+
+          const tip = e.location && e.location !== e.title ? `${e.title} — ${e.location}` : e.title;
+          chip.title = e.allDay ? tip : `${tip} · ${formatDate(e.start, false)}`;
+          chip.setAttribute("aria-label", `Add ${e.title} to calendar`);
+          chip.addEventListener("click", () => downloadIcs(e));
+          cell.appendChild(chip);
+        }
+
+        grid.appendChild(cell);
+      }
+
+      cal.appendChild(grid);
+      sectionsEl.replaceChildren(cal);
+
+      const stamp = memory.fetchedAt ? new Date(memory.fetchedAt) : new Date();
+      const stampText = isNaN(stamp.getTime())
+        ? new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        : stamp.toLocaleString([], { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+      setState(`Updated ${stampText}`);
+    }
+
+    function renderList(events) {
       const filtered = applyFilters(events);
       sectionsEl.textContent = "";
       if (!filtered.length) {
@@ -846,6 +1259,8 @@
       refreshBtnEl.addEventListener("click", () => {
         refresh({ force: true });
       });
+      viewListBtnEl.addEventListener("click", () => setView("list"));
+      viewCalendarBtnEl.addEventListener("click", () => setView("calendar"));
       feedSelectEl.addEventListener("change", () => {
         const slug = feedSelectEl.value;
         if (!slug || slug === memory.currentFeed) return;
@@ -872,6 +1287,7 @@
 
     initPWA();
     loadFilterState();
+    loadViewState();
     bind();
     (async () => {
       await initFeeds();
