@@ -302,8 +302,8 @@
 
     .date-box {
       flex-shrink: 0;
-      width: 72px;
-      padding: 8px 6px;
+      width: 88px;
+      padding: 10px 10px;
       border-radius: 12px;
       background: color-mix(in srgb, var(--accent) 10%, var(--surface));
       border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
@@ -313,15 +313,15 @@
       justify-content: center;
       text-align: center;
       line-height: 1;
-      gap: 4px;
+      gap: 6px;
     }
 
     .date-box .dow {
-      font-size: 11px;
+      font-size: 10.5px;
       font-weight: 700;
       color: var(--accent);
       text-transform: uppercase;
-      letter-spacing: .08em;
+      letter-spacing: .04em;
     }
 
     .date-box .day {
@@ -655,9 +655,10 @@
     }
 
     @media (max-width: 520px) {
-      .date-box { width: 62px; padding: 6px 4px; }
+      .date-box { width: 76px; padding: 8px 8px; }
       .date-box .day { font-size: 26px; }
-      .date-box .dow, .date-box .month { font-size: 10px; }
+      .date-box .dow { font-size: 9.5px; letter-spacing: .03em; }
+      .date-box .month { font-size: 10px; }
       .cal-day { min-height: 72px; padding: 4px; }
       .cal-day-number { font-size: 11px; }
       .cal-event { font-size: 10px; padding: 3px 4px; }
