@@ -768,24 +768,42 @@
       border-left-color: var(--accent);
     }
 
-    .card.multi-day .date-box {
+    .card.multi-day-card .date-box {
       background: color-mix(in srgb, var(--accent) 16%, var(--surface));
       border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
     }
 
-    .card.span-start,
-    .card.span-end {
-      position: relative;
-      overflow: visible;
+    .card.multi-day-card {
+      flex-direction: column;
+      align-items: stretch;
+      justify-content: flex-start;
+      gap: 0;
+      padding: 0;
     }
 
-    .card.span-start::after,
-    .card.span-end::before {
+    .card.multi-day-card .md-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 12px 14px;
+    }
+
+    .card.multi-day-card .md-row + .md-row {
+      border-top: 1px dashed var(--border);
+    }
+
+    .card.multi-day-card .md-row > .date-box {
+      position: relative;
+    }
+
+    .card.multi-day-card .md-row:first-child > .date-box::after,
+    .card.multi-day-card .md-row:last-child > .date-box::before {
       content: "";
       position: absolute;
-      left: 58px;
+      left: 50%;
       width: 4px;
-      height: 22px;
+      height: 14px;
       background: var(--accent);
       border-radius: 2px;
       transform: translateX(-50%);
@@ -793,31 +811,16 @@
       pointer-events: none;
     }
 
-    .card.span-start::after { bottom: -11px; }
-    .card.span-end::before { top: -11px; }
+    .card.multi-day-card .md-row:first-child > .date-box::after { top: 100%; }
+    .card.multi-day-card .md-row:last-child > .date-box::before { bottom: 100%; }
 
-    .card.past.span-start::after,
-    .card.past.span-end::before {
+    .card.multi-day-card.past .md-row:first-child > .date-box::after,
+    .card.multi-day-card.past .md-row:last-child > .date-box::before {
       background: var(--muted);
       opacity: 0.55;
     }
 
-    .event-span-label {
-      margin: 5px 0 0;
-      font-size: 12px;
-      font-weight: 700;
-      color: var(--accent);
-      text-transform: uppercase;
-      letter-spacing: .08em;
-    }
-
-    .card.past .event-span-label {
-      color: var(--muted);
-    }
-
     @media (max-width: 520px) {
-      .card.span-start::after,
-      .card.span-end::before { left: 52px; }
       .date-box { width: 76px; padding: 8px 8px; }
       .date-box .day { font-size: 26px; }
       .date-box .dow { font-size: 9.5px; letter-spacing: .03em; }
@@ -1266,17 +1269,22 @@
       return new Intl.DateTimeFormat(undefined, { weekday: "short", day: "2-digit", month: "short" }).format(date);
     }
 
-    function buildEventCard(event, { span = null, isPast = false } = {}) {
-      const multiDay = isMultiDay(event);
-      const card = document.createElement("article");
-      card.className = "card";
-      if (isPast) card.classList.add("past");
-      if (multiDay) card.classList.add("multi-day");
-      if (span === "start") card.classList.add("span-start");
-      if (span === "end") card.classList.add("span-end");
+    function buildIcsActions(event) {
+      const actions = document.createElement("div");
+      actions.className = "card-actions";
+      const icsBtn = document.createElement("button");
+      icsBtn.type = "button";
+      icsBtn.className = "ics-btn";
+      icsBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9h18"/><path d="M8 3v3"/><path d="M16 3v3"/><path d="M12 13v4"/><path d="M10 15h4"/></svg>';
+      icsBtn.setAttribute("aria-label", `Add ${event.title} to calendar`);
+      icsBtn.title = "Add to calendar";
+      icsBtn.addEventListener("click", () => downloadIcs(event));
+      actions.appendChild(icsBtn);
+      return actions;
+    }
 
-      const dateForBox = span === "end" ? inclusiveEndDay(event) : event.start;
-      card.appendChild(buildDateBox(dateForBox));
+    function populateRow(row, event, { date, time, withIcs }) {
+      row.appendChild(buildDateBox(date));
 
       const content = document.createElement("div");
       content.className = "card-content";
@@ -1291,40 +1299,51 @@
 
       content.append(locationHeading, titleDetail);
 
-      if (multiDay) {
-        const label = document.createElement("p");
-        label.className = "event-span-label";
-        const isStart = span !== "end";
-        if (event.allDay) {
-          label.textContent = isStart ? "Starts" : "Ends";
-        } else {
-          label.textContent = isStart ? `Starts · ${formatTime(event.start)}` : `Ends · ${formatTime(event.end)}`;
-        }
-        content.appendChild(label);
-      } else if (!event.allDay) {
-        const time = document.createElement("p");
-        time.className = "event-time";
-        time.textContent = formatTime(event.start);
-        content.appendChild(time);
+      if (time !== null) {
+        const timeEl = document.createElement("p");
+        timeEl.className = "event-time";
+        timeEl.textContent = time;
+        content.appendChild(timeEl);
       }
 
-      card.appendChild(content);
+      row.appendChild(content);
 
-      const showIcs = !isPast && (!multiDay || span !== "end");
-      if (showIcs) {
-        const actions = document.createElement("div");
-        actions.className = "card-actions";
-        const icsBtn = document.createElement("button");
-        icsBtn.type = "button";
-        icsBtn.className = "ics-btn";
-        icsBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9h18"/><path d="M8 3v3"/><path d="M16 3v3"/><path d="M12 13v4"/><path d="M10 15h4"/></svg>';
-        icsBtn.setAttribute("aria-label", `Add ${event.title} to calendar`);
-        icsBtn.title = "Add to calendar";
-        icsBtn.addEventListener("click", () => downloadIcs(event));
-        actions.appendChild(icsBtn);
-        card.appendChild(actions);
+      if (withIcs) row.appendChild(buildIcsActions(event));
+    }
+
+    function buildEventCard(event, { isPast = false } = {}) {
+      const card = document.createElement("article");
+      card.className = "card";
+      if (isPast) card.classList.add("past");
+
+      if (!isMultiDay(event)) {
+        populateRow(card, event, {
+          date: event.start,
+          time: event.allDay ? null : formatTime(event.start),
+          withIcs: !isPast,
+        });
+        return card;
       }
 
+      card.classList.add("multi-day-card");
+
+      const startRow = document.createElement("div");
+      startRow.className = "md-row";
+      populateRow(startRow, event, {
+        date: event.start,
+        time: event.allDay ? null : formatTime(event.start),
+        withIcs: !isPast,
+      });
+
+      const endRow = document.createElement("div");
+      endRow.className = "md-row";
+      populateRow(endRow, event, {
+        date: inclusiveEndDay(event),
+        time: event.allDay ? null : formatTime(event.end),
+        withIcs: false,
+      });
+
+      card.append(startRow, endRow);
       return card;
     }
 
@@ -1586,20 +1605,9 @@
         list.className = "list";
 
         for (const e of arr) {
-          const isPast = key === "Past";
-          if (isMultiDay(e)) {
-            const startCard = buildEventCard(e, { span: "start", isPast });
-            const endCard = buildEventCard(e, { span: "end", isPast });
-            list.append(startCard, endCard);
-            requestAnimationFrame(() => {
-              startCard.classList.add("visible");
-              endCard.classList.add("visible");
-            });
-          } else {
-            const card = buildEventCard(e, { isPast });
-            list.appendChild(card);
-            requestAnimationFrame(() => card.classList.add("visible"));
-          }
+          const card = buildEventCard(e, { isPast: key === "Past" });
+          list.appendChild(card);
+          requestAnimationFrame(() => card.classList.add("visible"));
         }
 
         section.appendChild(list);
