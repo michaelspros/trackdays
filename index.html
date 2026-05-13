@@ -758,6 +758,73 @@
       opacity: 0.55;
     }
 
+    .cal-event.continuation {
+      background: color-mix(in srgb, var(--accent) 7%, transparent);
+      border-left: 3px solid color-mix(in srgb, var(--accent) 55%, transparent);
+      padding-left: 4px;
+    }
+
+    .cal-event.continuation.start-edge {
+      border-left-color: var(--accent);
+    }
+
+    .card.multi-day-card .date-box {
+      background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+      border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
+    }
+
+    .card.multi-day-card.past .date-box {
+      background: color-mix(in srgb, var(--muted) 10%, var(--surface));
+      border-color: var(--border);
+    }
+
+    .card.multi-day-card {
+      flex-direction: column;
+      align-items: stretch;
+      justify-content: flex-start;
+      gap: 0;
+      padding: 0;
+    }
+
+    .card.multi-day-card .md-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 12px 14px;
+    }
+
+    .card.multi-day-card .md-row + .md-row {
+      border-top: 1px dashed var(--border);
+    }
+
+    .card.multi-day-card .md-row > .date-box {
+      position: relative;
+    }
+
+    .card.multi-day-card .md-row:first-child > .date-box::after,
+    .card.multi-day-card .md-row:last-child > .date-box::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      width: 4px;
+      height: 14px;
+      background: var(--accent);
+      border-radius: 2px;
+      transform: translateX(-50%);
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    .card.multi-day-card .md-row:first-child > .date-box::after { top: 100%; }
+    .card.multi-day-card .md-row:last-child > .date-box::before { bottom: 100%; }
+
+    .card.multi-day-card.past .md-row:first-child > .date-box::after,
+    .card.multi-day-card.past .md-row:last-child > .date-box::before {
+      background: var(--muted);
+      opacity: 0.55;
+    }
+
     @media (max-width: 520px) {
       .date-box { width: 76px; padding: 8px 8px; }
       .date-box .day { font-size: 26px; }
@@ -1098,6 +1165,37 @@
       return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
     }
 
+    function startOfDay(date) {
+      const d = new Date(date);
+      d.setHours(0, 0, 0, 0);
+      return d;
+    }
+
+    function inclusiveEndDay(event) {
+      const startDay = startOfDay(event.start);
+      if (event.allDay) {
+        const d = startOfDay(event.end);
+        d.setDate(d.getDate() - 1);
+        return d < startDay ? startDay : d;
+      }
+      const e = new Date(event.end.getTime() - 1);
+      const d = startOfDay(e);
+      return d < startDay ? startDay : d;
+    }
+
+    function isMultiDay(event) {
+      return inclusiveEndDay(event) > startOfDay(event.start);
+    }
+
+    function* eachDayOf(event) {
+      const end = inclusiveEndDay(event);
+      const cursor = startOfDay(event.start);
+      while (cursor <= end) {
+        yield new Date(cursor);
+        cursor.setDate(cursor.getDate() + 1);
+      }
+    }
+
     function startOfWeek(date) {
       const d = new Date(date);
       const day = (d.getDay() + 6) % 7;
@@ -1106,15 +1204,17 @@
       return d;
     }
 
-    function groupForDate(date, now = new Date()) {
-      const today = new Date(now);
-      today.setHours(0, 0, 0, 0);
+    function eventGroup(event, now = new Date()) {
+      const today = startOfDay(now);
+      const startDay = startOfDay(event.start);
+      const endDay = inclusiveEndDay(event);
+
+      if (endDay < today) return "Past";
+      if (startDay <= today && endDay >= today) return "Today";
+
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
-
-      if (date < today) return "Past";
-      if (isSameDay(date, today)) return "Today";
-      if (isSameDay(date, tomorrow)) return "Tomorrow";
+      if (isSameDay(startDay, tomorrow)) return "Tomorrow";
 
       const thisWeekStart = startOfWeek(today);
       const nextWeekStart = new Date(thisWeekStart);
@@ -1122,8 +1222,8 @@
       const afterNextWeekStart = new Date(nextWeekStart);
       afterNextWeekStart.setDate(afterNextWeekStart.getDate() + 7);
 
-      if (date >= thisWeekStart && date < nextWeekStart) return "This Week";
-      if (date >= nextWeekStart && date < afterNextWeekStart) return "Next Week";
+      if (startDay >= thisWeekStart && startDay < nextWeekStart) return "This Week";
+      if (startDay >= nextWeekStart && startDay < afterNextWeekStart) return "Next Week";
       return "Later";
     }
 
@@ -1163,12 +1263,93 @@
     }
 
     function applyFilters(events) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const today = startOfDay(new Date());
       return events.filter((e) => {
-        if (!showPastEl.checked && e.start < today) return false;
-        return true;
+        if (showPastEl.checked) return true;
+        return inclusiveEndDay(e) >= today;
       });
+    }
+
+    function formatDayShort(date) {
+      return new Intl.DateTimeFormat(undefined, { weekday: "short", day: "2-digit", month: "short" }).format(date);
+    }
+
+    function buildIcsActions(event) {
+      const actions = document.createElement("div");
+      actions.className = "card-actions";
+      const icsBtn = document.createElement("button");
+      icsBtn.type = "button";
+      icsBtn.className = "ics-btn";
+      icsBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9h18"/><path d="M8 3v3"/><path d="M16 3v3"/><path d="M12 13v4"/><path d="M10 15h4"/></svg>';
+      icsBtn.setAttribute("aria-label", `Add ${event.title} to calendar`);
+      icsBtn.title = "Add to calendar";
+      icsBtn.addEventListener("click", () => downloadIcs(event));
+      actions.appendChild(icsBtn);
+      return actions;
+    }
+
+    function populateRow(row, event, { date, time, withIcs }) {
+      row.appendChild(buildDateBox(date));
+
+      const content = document.createElement("div");
+      content.className = "card-content";
+
+      const locationHeading = document.createElement("h3");
+      locationHeading.className = "event-title";
+      locationHeading.textContent = event.location || event.title;
+
+      const titleDetail = document.createElement("p");
+      titleDetail.className = "event-location";
+      titleDetail.textContent = event.title;
+
+      content.append(locationHeading, titleDetail);
+
+      if (time !== null) {
+        const timeEl = document.createElement("p");
+        timeEl.className = "event-time";
+        timeEl.textContent = time;
+        content.appendChild(timeEl);
+      }
+
+      row.appendChild(content);
+
+      if (withIcs) row.appendChild(buildIcsActions(event));
+    }
+
+    function buildEventCard(event, { isPast = false } = {}) {
+      const card = document.createElement("article");
+      card.className = "card";
+      if (isPast) card.classList.add("past");
+
+      if (!isMultiDay(event)) {
+        populateRow(card, event, {
+          date: event.start,
+          time: event.allDay ? null : formatTime(event.start),
+          withIcs: !isPast,
+        });
+        return card;
+      }
+
+      card.classList.add("multi-day-card");
+
+      const startRow = document.createElement("div");
+      startRow.className = "md-row";
+      populateRow(startRow, event, {
+        date: event.start,
+        time: event.allDay ? null : formatTime(event.start),
+        withIcs: !isPast,
+      });
+
+      const endRow = document.createElement("div");
+      endRow.className = "md-row";
+      populateRow(endRow, event, {
+        date: inclusiveEndDay(event),
+        time: event.allDay ? null : formatTime(event.end),
+        withIcs: false,
+      });
+
+      card.append(startRow, endRow);
+      return card;
     }
 
     function pad(n, w = 2) {
@@ -1256,12 +1437,14 @@
       return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
     }
 
-    function bucketByStartDate(events) {
+    function bucketByDay(events) {
       const map = new Map();
       for (const e of events) {
-        const k = dateKey(e.start);
-        if (!map.has(k)) map.set(k, []);
-        map.get(k).push(e);
+        for (const d of eachDayOf(e)) {
+          const k = dateKey(d);
+          if (!map.has(k)) map.set(k, []);
+          map.get(k).push(e);
+        }
       }
       return map;
     }
@@ -1282,7 +1465,7 @@
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      const buckets = bucketByStartDate(events);
+      const buckets = bucketByDay(events);
 
       const cal = document.createElement("div");
       cal.className = "calendar";
@@ -1349,7 +1532,11 @@
           const chip = document.createElement("button");
           chip.type = "button";
           chip.className = "cal-event";
-          if (e.start < today) chip.classList.add("past");
+          const eventStartDay = startOfDay(e.start);
+          const isStart = isSameDay(eventStartDay, day);
+          const multiDay = isMultiDay(e);
+          if (day < today) chip.classList.add("past");
+          if (multiDay && !isStart) chip.classList.add("continuation");
 
           const primary = document.createElement("span");
           primary.className = "cal-event-title";
@@ -1364,7 +1551,13 @@
           }
 
           const tip = e.location && e.location !== e.title ? `${e.title} — ${e.location}` : e.title;
-          chip.title = e.allDay ? tip : `${tip} · ${formatDate(e.start, false)}`;
+          let tipSuffix = "";
+          if (multiDay) {
+            tipSuffix = ` · ${formatDayShort(eventStartDay)} → ${formatDayShort(inclusiveEndDay(e))}`;
+          } else if (!e.allDay) {
+            tipSuffix = ` · ${formatDate(e.start, false)}`;
+          }
+          chip.title = `${tip}${tipSuffix}`;
           chip.setAttribute("aria-label", `Add ${e.title} to calendar`);
           chip.addEventListener("click", () => downloadIcs(e));
           cell.appendChild(chip);
@@ -1398,7 +1591,7 @@
       const win = virtualWindow(filtered.length);
       const picked = filtered.slice(win.start, win.end);
       const groups = new Map(GROUPS.map((g) => [g, []]));
-      for (const event of picked) groups.get(groupForDate(event.start)).push(event);
+      for (const event of picked) groups.get(eventGroup(event)).push(event);
 
       const frag = document.createDocumentFragment();
       for (const key of GROUPS) {
@@ -1417,48 +1610,7 @@
         list.className = "list";
 
         for (const e of arr) {
-          const card = document.createElement("article");
-          card.className = "card";
-          if (key === "Past") card.classList.add("past");
-
-          card.appendChild(buildDateBox(e.start));
-
-          const content = document.createElement("div");
-          content.className = "card-content";
-
-          const locationHeading = document.createElement("h3");
-          locationHeading.className = "event-title";
-          locationHeading.textContent = e.location || e.title;
-
-          const titleDetail = document.createElement("p");
-          titleDetail.className = "event-location";
-          titleDetail.textContent = e.title;
-
-          content.append(locationHeading, titleDetail);
-
-          if (!e.allDay) {
-            const time = document.createElement("p");
-            time.className = "event-time";
-            time.textContent = formatTime(e.start);
-            content.appendChild(time);
-          }
-
-          card.appendChild(content);
-
-          if (key !== "Past") {
-            const actions = document.createElement("div");
-            actions.className = "card-actions";
-            const icsBtn = document.createElement("button");
-            icsBtn.type = "button";
-            icsBtn.className = "ics-btn";
-            icsBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9h18"/><path d="M8 3v3"/><path d="M16 3v3"/><path d="M12 13v4"/><path d="M10 15h4"/></svg>';
-            icsBtn.setAttribute("aria-label", `Add ${e.title} to calendar`);
-            icsBtn.title = "Add to calendar";
-            icsBtn.addEventListener("click", () => downloadIcs(e));
-            actions.appendChild(icsBtn);
-            card.appendChild(actions);
-          }
-
+          const card = buildEventCard(e, { isPast: key === "Past" });
           list.appendChild(card);
           requestAnimationFrame(() => card.classList.add("visible"));
         }
