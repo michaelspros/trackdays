@@ -773,27 +773,51 @@
       border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
     }
 
-    .date-box .range-end {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      font-size: 11px;
+    .card.span-start,
+    .card.span-end {
+      position: relative;
+      overflow: visible;
+    }
+
+    .card.span-start::after,
+    .card.span-end::before {
+      content: "";
+      position: absolute;
+      left: 58px;
+      width: 4px;
+      height: 22px;
+      background: var(--accent);
+      border-radius: 2px;
+      transform: translateX(-50%);
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    .card.span-start::after { bottom: -11px; }
+    .card.span-end::before { top: -11px; }
+
+    .card.past.span-start::after,
+    .card.past.span-end::before {
+      background: var(--muted);
+      opacity: 0.55;
+    }
+
+    .event-span-label {
+      margin: 5px 0 0;
+      font-size: 12px;
       font-weight: 700;
       color: var(--accent);
-      letter-spacing: .04em;
-      margin-top: 2px;
-      line-height: 1;
+      text-transform: uppercase;
+      letter-spacing: .08em;
     }
 
-    .date-box .range-end .arrow {
-      font-weight: 800;
-    }
-
-    .card.past .date-box .range-end {
+    .card.past .event-span-label {
       color: var(--muted);
     }
 
     @media (max-width: 520px) {
+      .card.span-start::after,
+      .card.span-end::before { left: 52px; }
       .date-box { width: 76px; padding: 8px 8px; }
       .date-box .day { font-size: 26px; }
       .date-box .dow { font-size: 9.5px; letter-spacing: .03em; }
@@ -1212,14 +1236,11 @@
       return { dow, day: date.getDate(), month };
     }
 
-    function buildDateBox(date, endDate = null) {
+    function buildDateBox(date) {
       const { dow, day, month } = dateBoxParts(date);
       const box = document.createElement("div");
       box.className = "date-box";
-      const aria = endDate
-        ? `${dow} ${day} ${month} to ${dateBoxParts(endDate).dow} ${endDate.getDate()} ${dateBoxParts(endDate).month}`
-        : `${dow} ${day} ${month}`;
-      box.setAttribute("aria-label", aria);
+      box.setAttribute("aria-label", `${dow} ${day} ${month}`);
       const dowEl = document.createElement("span");
       dowEl.className = "dow";
       dowEl.textContent = dow;
@@ -1230,20 +1251,6 @@
       monthEl.className = "month";
       monthEl.textContent = month;
       box.append(dowEl, dayEl, monthEl);
-      if (endDate) {
-        const endParts = dateBoxParts(endDate);
-        const rangeEnd = document.createElement("span");
-        rangeEnd.className = "range-end";
-        const arrow = document.createElement("span");
-        arrow.className = "arrow";
-        arrow.textContent = "→";
-        const endLabel = document.createElement("span");
-        endLabel.textContent = endParts.month === month
-          ? String(endDate.getDate())
-          : `${endDate.getDate()} ${endParts.month}`;
-        rangeEnd.append(arrow, endLabel);
-        box.appendChild(rangeEnd);
-      }
       return box;
     }
 
@@ -1259,14 +1266,66 @@
       return new Intl.DateTimeFormat(undefined, { weekday: "short", day: "2-digit", month: "short" }).format(date);
     }
 
-    function formatRangeLine(event) {
+    function buildEventCard(event, { span = null, isPast = false } = {}) {
       const multiDay = isMultiDay(event);
-      if (event.allDay) {
-        if (!multiDay) return null;
-        return `→ ${formatDayShort(inclusiveEndDay(event))}`;
+      const card = document.createElement("article");
+      card.className = "card";
+      if (isPast) card.classList.add("past");
+      if (multiDay) card.classList.add("multi-day");
+      if (span === "start") card.classList.add("span-start");
+      if (span === "end") card.classList.add("span-end");
+
+      const dateForBox = span === "end" ? inclusiveEndDay(event) : event.start;
+      card.appendChild(buildDateBox(dateForBox));
+
+      const content = document.createElement("div");
+      content.className = "card-content";
+
+      const locationHeading = document.createElement("h3");
+      locationHeading.className = "event-title";
+      locationHeading.textContent = event.location || event.title;
+
+      const titleDetail = document.createElement("p");
+      titleDetail.className = "event-location";
+      titleDetail.textContent = event.title;
+
+      content.append(locationHeading, titleDetail);
+
+      if (multiDay) {
+        const label = document.createElement("p");
+        label.className = "event-span-label";
+        const isStart = span !== "end";
+        if (event.allDay) {
+          label.textContent = isStart ? "Starts" : "Ends";
+        } else {
+          label.textContent = isStart ? `Starts · ${formatTime(event.start)}` : `Ends · ${formatTime(event.end)}`;
+        }
+        content.appendChild(label);
+      } else if (!event.allDay) {
+        const time = document.createElement("p");
+        time.className = "event-time";
+        time.textContent = formatTime(event.start);
+        content.appendChild(time);
       }
-      if (!multiDay) return formatTime(event.start);
-      return `${formatTime(event.start)} → ${formatDayShort(inclusiveEndDay(event))} ${formatTime(event.end)}`;
+
+      card.appendChild(content);
+
+      const showIcs = !isPast && (!multiDay || span !== "end");
+      if (showIcs) {
+        const actions = document.createElement("div");
+        actions.className = "card-actions";
+        const icsBtn = document.createElement("button");
+        icsBtn.type = "button";
+        icsBtn.className = "ics-btn";
+        icsBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9h18"/><path d="M8 3v3"/><path d="M16 3v3"/><path d="M12 13v4"/><path d="M10 15h4"/></svg>';
+        icsBtn.setAttribute("aria-label", `Add ${event.title} to calendar`);
+        icsBtn.title = "Add to calendar";
+        icsBtn.addEventListener("click", () => downloadIcs(event));
+        actions.appendChild(icsBtn);
+        card.appendChild(actions);
+      }
+
+      return card;
     }
 
     function pad(n, w = 2) {
@@ -1527,53 +1586,20 @@
         list.className = "list";
 
         for (const e of arr) {
-          const card = document.createElement("article");
-          card.className = "card";
-          if (key === "Past") card.classList.add("past");
-          const multiDay = isMultiDay(e);
-          if (multiDay) card.classList.add("multi-day");
-
-          card.appendChild(buildDateBox(e.start, multiDay ? inclusiveEndDay(e) : null));
-
-          const content = document.createElement("div");
-          content.className = "card-content";
-
-          const locationHeading = document.createElement("h3");
-          locationHeading.className = "event-title";
-          locationHeading.textContent = e.location || e.title;
-
-          const titleDetail = document.createElement("p");
-          titleDetail.className = "event-location";
-          titleDetail.textContent = e.title;
-
-          content.append(locationHeading, titleDetail);
-
-          const rangeText = formatRangeLine(e);
-          if (rangeText) {
-            const time = document.createElement("p");
-            time.className = "event-time";
-            time.textContent = rangeText;
-            content.appendChild(time);
+          const isPast = key === "Past";
+          if (isMultiDay(e)) {
+            const startCard = buildEventCard(e, { span: "start", isPast });
+            const endCard = buildEventCard(e, { span: "end", isPast });
+            list.append(startCard, endCard);
+            requestAnimationFrame(() => {
+              startCard.classList.add("visible");
+              endCard.classList.add("visible");
+            });
+          } else {
+            const card = buildEventCard(e, { isPast });
+            list.appendChild(card);
+            requestAnimationFrame(() => card.classList.add("visible"));
           }
-
-          card.appendChild(content);
-
-          if (key !== "Past") {
-            const actions = document.createElement("div");
-            actions.className = "card-actions";
-            const icsBtn = document.createElement("button");
-            icsBtn.type = "button";
-            icsBtn.className = "ics-btn";
-            icsBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9h18"/><path d="M8 3v3"/><path d="M16 3v3"/><path d="M12 13v4"/><path d="M10 15h4"/></svg>';
-            icsBtn.setAttribute("aria-label", `Add ${e.title} to calendar`);
-            icsBtn.title = "Add to calendar";
-            icsBtn.addEventListener("click", () => downloadIcs(e));
-            actions.appendChild(icsBtn);
-            card.appendChild(actions);
-          }
-
-          list.appendChild(card);
-          requestAnimationFrame(() => card.classList.add("visible"));
         }
 
         section.appendChild(list);
