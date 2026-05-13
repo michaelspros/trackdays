@@ -3,47 +3,88 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#ffffff" />
+  <meta id="themeColorMeta" name="theme-color" content="#f7f8fa" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem("agenda_theme_v1");
+        var theme = saved === "light" || saved === "dark" ? saved : "system";
+        document.documentElement.setAttribute("data-theme", theme);
+      } catch (_) {
+        document.documentElement.setAttribute("data-theme", "system");
+      }
+    })();
+  </script>
   <meta name="apple-mobile-web-app-title" content="Trackdays" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%232f6efb'/%3E%3Ccircle cx='32' cy='32' r='8' fill='white'/%3E%3C/svg%3E" />
   <title>Trackdays</title>
   <style>
-    :root {
-      --bg: #f7f8fa;
+    :root,
+    :root[data-theme="light"] {
+      --bg: #f5f7fb;
       --surface: #ffffff;
-      --text: #111318;
-      --muted: #6e7584;
-      --border: rgba(17, 19, 24, 0.08);
+      --surface-2: #f0f3f9;
+      --text: #0f1320;
+      --muted: #5f6a7d;
+      --border: rgba(15, 19, 32, 0.08);
+      --border-strong: rgba(15, 19, 32, 0.14);
       --shadow: 0 6px 22px rgba(15, 20, 35, 0.06);
       --shadow-hover: 0 10px 28px rgba(15, 20, 35, 0.11);
-      --header-bg: rgba(247, 248, 250, 0.88);
+      --header-bg: rgba(245, 247, 251, 0.82);
       --toggle-bg: #d7dce6;
       --toggle-knob: #ffffff;
       --accent: #2f6efb;
+      --accent-contrast: #ffffff;
       --skeleton: linear-gradient(90deg, rgba(110,117,132,.12) 0%, rgba(110,117,132,.2) 50%, rgba(110,117,132,.12) 100%);
+      color-scheme: light;
+    }
+
+    :root[data-theme="dark"] {
+      --bg: #0b0e15;
+      --surface: #141923;
+      --surface-2: #1b2230;
+      --text: #f3f5fa;
+      --muted: #9aa4b7;
+      --border: rgba(243, 245, 250, 0.08);
+      --border-strong: rgba(243, 245, 250, 0.16);
+      --shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+      --shadow-hover: 0 12px 30px rgba(0, 0, 0, 0.48);
+      --header-bg: rgba(11, 14, 21, 0.82);
+      --toggle-bg: #2a3343;
+      --toggle-knob: #f3f5fa;
+      --accent: #6f9bff;
+      --accent-contrast: #0b0e15;
+      --skeleton: linear-gradient(90deg, rgba(154,164,183,.08) 0%, rgba(154,164,183,.18) 50%, rgba(154,164,183,.08) 100%);
+      color-scheme: dark;
     }
 
     @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #0d1016;
-        --surface: #151a23;
+      :root[data-theme="system"] {
+        --bg: #0b0e15;
+        --surface: #141923;
+        --surface-2: #1b2230;
         --text: #f3f5fa;
         --muted: #9aa4b7;
         --border: rgba(243, 245, 250, 0.08);
+        --border-strong: rgba(243, 245, 250, 0.16);
         --shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
         --shadow-hover: 0 12px 30px rgba(0, 0, 0, 0.48);
-        --header-bg: rgba(13, 16, 22, 0.88);
+        --header-bg: rgba(11, 14, 21, 0.82);
         --toggle-bg: #2a3343;
         --toggle-knob: #f3f5fa;
         --accent: #6f9bff;
+        --accent-contrast: #0b0e15;
+        --skeleton: linear-gradient(90deg, rgba(154,164,183,.08) 0%, rgba(154,164,183,.18) 50%, rgba(154,164,183,.08) 100%);
+        color-scheme: dark;
       }
     }
 
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; }
+    html { background: var(--bg); }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       background: var(--bg);
@@ -54,7 +95,56 @@
       padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
       -webkit-tap-highlight-color: transparent;
       -webkit-text-size-adjust: 100%;
+      transition: background-color .2s ease, color .2s ease;
     }
+
+    .theme-toggle {
+      appearance: none;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      width: 36px;
+      height: 36px;
+      padding: 0;
+      border-radius: 50%;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: var(--shadow);
+      transition: transform .18s ease, box-shadow .18s ease, background .18s ease, color .18s ease;
+      position: relative;
+    }
+
+    .theme-toggle svg {
+      width: 18px;
+      height: 18px;
+      display: block;
+      transition: opacity .18s ease, transform .25s ease;
+    }
+
+    .theme-toggle .icon-sun { display: none; }
+    :root[data-theme="dark"] .theme-toggle .icon-sun { display: block; }
+    :root[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
+    @media (prefers-color-scheme: dark) {
+      :root[data-theme="system"] .theme-toggle .icon-sun { display: block; }
+      :root[data-theme="system"] .theme-toggle .icon-moon { display: none; }
+    }
+
+    @media (hover: hover) {
+      .theme-toggle:hover {
+        transform: translateY(-1px);
+        box-shadow: var(--shadow-hover);
+        color: var(--accent);
+      }
+    }
+
+    .theme-toggle:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .theme-toggle:active { transform: scale(0.94); }
 
     button, select, label.switch, .ics-btn, .cal-event {
       touch-action: manipulation;
@@ -98,6 +188,10 @@
       font-size: 26px;
       font-weight: 750;
       letter-spacing: -0.02em;
+      background: linear-gradient(135deg, var(--text) 0%, color-mix(in srgb, var(--accent) 55%, var(--text)) 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
     }
 
     .feed-select-wrap {
@@ -287,12 +381,16 @@
       box-shadow: var(--shadow);
       transform: translateY(2px);
       opacity: 0;
-      transition: box-shadow .22s ease, transform .22s ease;
+      transition: box-shadow .22s ease, transform .22s ease, border-color .22s ease, background-color .22s ease;
       will-change: transform, opacity;
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 14px;
+    }
+
+    @media (hover: hover) {
+      .card:hover { border-color: var(--border-strong); }
     }
 
     .card-content {
@@ -698,6 +796,10 @@
             <button id="viewListBtn" type="button" aria-pressed="true">List</button>
             <button id="viewCalendarBtn" type="button" aria-pressed="false">Calendar</button>
           </div>
+          <button id="themeToggle" class="theme-toggle" type="button" aria-label="Toggle dark mode" title="Toggle theme">
+            <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="M4.93 4.93l1.41 1.41"/><path d="M17.66 17.66l1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="M4.93 19.07l1.41-1.41"/><path d="M17.66 6.34l1.41-1.41"/></svg>
+          </button>
         </div>
       </div>
       <div class="filters">
@@ -723,6 +825,7 @@
     const FILTER_KEY = "agenda_filter_state_v2";
     const FEED_KEY = "agenda_feed_slug_v1";
     const VIEW_KEY = "agenda_view_v1";
+    const THEME_KEY = "agenda_theme_v1";
     const REFRESH_MS = 60 * 60 * 1000;
     const MAX_EVENTS = 100;
     const GROUPS = ["Past", "Today", "Tomorrow", "This Week", "Next Week", "Later"];
@@ -737,6 +840,8 @@
     const viewListBtnEl = document.getElementById("viewListBtn");
     const viewCalendarBtnEl = document.getElementById("viewCalendarBtn");
     const showPastWrapEl = document.getElementById("showPastWrap");
+    const themeToggleEl = document.getElementById("themeToggle");
+    const themeColorMetaEl = document.getElementById("themeColorMeta");
 
     const memory = {
       events: [],
@@ -783,6 +888,39 @@
       link.rel = "manifest";
       link.href = url;
       document.head.appendChild(link);
+    }
+
+    function effectiveTheme(theme) {
+      if (theme === "light" || theme === "dark") return theme;
+      return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+
+    function applyTheme(theme) {
+      document.documentElement.setAttribute("data-theme", theme);
+      const eff = effectiveTheme(theme);
+      if (themeColorMetaEl) {
+        themeColorMetaEl.setAttribute("content", eff === "dark" ? "#0b0e15" : "#f5f7fb");
+      }
+      if (themeToggleEl) {
+        themeToggleEl.setAttribute("aria-label", eff === "dark" ? "Switch to light mode" : "Switch to dark mode");
+        themeToggleEl.setAttribute("aria-pressed", String(eff === "dark"));
+      }
+    }
+
+    function loadThemeState() {
+      let theme = "system";
+      try {
+        const saved = localStorage.getItem(THEME_KEY);
+        if (saved === "light" || saved === "dark") theme = saved;
+      } catch (_) {}
+      applyTheme(theme);
+    }
+
+    function toggleTheme() {
+      const eff = effectiveTheme(document.documentElement.getAttribute("data-theme") || "system");
+      const next = eff === "dark" ? "light" : "dark";
+      try { localStorage.setItem(THEME_KEY, next); } catch (_) {}
+      applyTheme(next);
     }
 
     function loadFilterState() {
@@ -1389,6 +1527,16 @@
       });
       viewListBtnEl.addEventListener("click", () => setView("list"));
       viewCalendarBtnEl.addEventListener("click", () => setView("calendar"));
+      themeToggleEl.addEventListener("click", toggleTheme);
+      if (window.matchMedia) {
+        const mq = window.matchMedia("(prefers-color-scheme: dark)");
+        const onChange = () => {
+          const current = document.documentElement.getAttribute("data-theme") || "system";
+          if (current === "system") applyTheme("system");
+        };
+        if (mq.addEventListener) mq.addEventListener("change", onChange);
+        else if (mq.addListener) mq.addListener(onChange);
+      }
       feedSelectEl.addEventListener("change", () => {
         const slug = feedSelectEl.value;
         if (!slug || slug === memory.currentFeed) return;
@@ -1414,6 +1562,7 @@
     }
 
     initPWA();
+    loadThemeState();
     loadFilterState();
     loadViewState();
     bind();
